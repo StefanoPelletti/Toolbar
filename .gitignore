@@ -1,0 +1,18 @@
+# Claude Code local settings
+.claude/
+
+# Build output
+bin/
+obj/
+*.user
+
+# VS / Rider
+.vs/
+.idea/
+*.suo
+
+# .NET publish
+publish/
+
+# User-specific config (contains local paths / tray icon cache)
+# The app's runtime config lives in %AppData%\Toolbar — not in the repo

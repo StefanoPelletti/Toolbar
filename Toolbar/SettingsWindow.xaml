@@ -1,0 +1,67 @@
+<Window x:Class="Toolbar.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="300" Height="180"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Background="#252526"
+            BorderBrush="#3C3C3C"
+            BorderThickness="1"
+            CornerRadius="6">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="36"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title bar -->
+            <Border Grid.Row="0"
+                    CornerRadius="6,6,0,0"
+                    MouseLeftButtonDown="OnTitleBar_Drag"
+                    Background="Transparent">
+                <Grid Margin="12,0,4,0">
+                    <TextBlock Text="Settings"
+                               Foreground="#E6E6E6"
+                               FontSize="12"
+                               VerticalAlignment="Center"/>
+                    <Button HorizontalAlignment="Right"
+                            Width="28" Height="28"
+                            Content="&#xE8BB;"
+                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                            FontSize="11"
+                            Click="OnClose"
+                            Style="{StaticResource CloseButton}"
+                            VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Content -->
+            <StackPanel Grid.Row="1" Margin="16,10,16,12">
+                <CheckBox x:Name="AlwaysOnTopBox"
+                          Content="Always on top"
+                          Foreground="#E6E6E6"
+                          Margin="0,0,0,8"/>
+                <CheckBox x:Name="LaunchAtBootBox"
+                          Content="Launch at Windows startup"
+                          Foreground="#E6E6E6"
+                          Margin="0,0,0,8"/>
+                <CheckBox x:Name="VerticalBox"
+                          Content="Vertical layout"
+                          Foreground="#E6E6E6"
+                          Margin="0,0,0,12"/>
+                <Button Content="Save"
+                        Width="72"
+                        HorizontalAlignment="Right"
+                        Padding="0,5"
+                        Click="OnSave"
+                        Background="#0E70C0"
+                        Foreground="White"
+                        BorderThickness="0"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

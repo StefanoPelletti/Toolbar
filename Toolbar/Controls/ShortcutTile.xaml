@@ -1,0 +1,32 @@
+<UserControl x:Class="Toolbar.Controls.ShortcutTile"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             Width="48" Height="48"
+             Cursor="Hand"
+             ToolTip="{Binding DisplayName}">
+
+    <Border x:Name="Bd"
+            Background="Transparent"
+            CornerRadius="6"
+            Margin="2,0">
+        <Image Source="{Binding Icon}"
+               Width="32" Height="32"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center"
+               RenderOptions.BitmapScalingMode="HighQuality"/>
+    </Border>
+
+    <UserControl.ContextMenu>
+        <ContextMenu>
+            <MenuItem Header="Launch" Click="OnContextLaunch"/>
+            <Separator/>
+            <MenuItem Header="Rename…" Click="OnContextRename"/>
+            <MenuItem Header="Change Icon…" Click="OnContextChangeIcon"/>
+            <Separator/>
+            <MenuItem Header="Remove" Click="OnContextRemove"/>
+        </ContextMenu>
+    </UserControl.ContextMenu>
+</UserControl>

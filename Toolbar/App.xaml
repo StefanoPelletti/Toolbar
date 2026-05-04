@@ -1,0 +1,71 @@
+<Application x:Class="Toolbar.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Toolbar"
+             >
+    <Application.Resources>
+        <ResourceDictionary>
+            <SolidColorBrush x:Key="BarBackground" Color="#1E1E1E"/>
+            <SolidColorBrush x:Key="BarBorder" Color="#3C3C3C"/>
+            <SolidColorBrush x:Key="TileHover" Color="#2D2D30"/>
+            <SolidColorBrush x:Key="TilePressed" Color="#3E3E42"/>
+            <SolidColorBrush x:Key="ForegroundPrimary" Color="#E6E6E6"/>
+            <SolidColorBrush x:Key="ForegroundDim" Color="#9A9A9A"/>
+            <SolidColorBrush x:Key="DangerHover" Color="#C42B1C"/>
+
+            <!-- Flat icon button used in the right zone -->
+            <Style x:Key="ChromeButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Foreground" Value="{StaticResource ForegroundPrimary}"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Width" Value="36"/>
+                <Setter Property="Height" Value="36"/>
+                <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="4">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource TileHover}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource TilePressed}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Close button — red hover -->
+            <Style x:Key="CloseButton" TargetType="Button" BasedOn="{StaticResource ChromeButton}">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="4">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource DangerHover}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -23,39 +23,62 @@
             CornerRadius="8"
             MouseLeftButtonDown="OnDragArea_MouseLeftButtonDown">
 
-        <!-- OuterPanel flips Orientation for vertical mode -->
-        <StackPanel x:Name="OuterPanel" Orientation="Horizontal">
+        <Grid>
+            <!-- OuterPanel flips Orientation for vertical mode -->
+            <StackPanel x:Name="OuterPanel" Orientation="Horizontal">
 
-            <!-- Shortcut tiles zone (tiles inserted here in code-behind) -->
-            <StackPanel x:Name="ShortcutsHost"
-                        Orientation="Horizontal"
-                        Margin="6,4,4,4"/>
+                <!-- Shortcut tiles zone — WrapPanel so tiles flow into columns/rows -->
+                <WrapPanel x:Name="ShortcutsHost"
+                           Orientation="Horizontal"
+                           Margin="6,4,4,4"/>
 
-            <!-- Single ⋮ menu button -->
-            <StackPanel x:Name="ButtonsHost"
-                        Orientation="Horizontal"
-                        Margin="4,4,6,4">
-                <Button x:Name="MenuBtn"
-                        Style="{StaticResource ChromeButton}"
-                        Content="&#xE712;"
-                        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                        FontSize="16"
-                        ToolTip="Menu"
-                        Click="OnMenu_Click">
-                    <Button.ContextMenu>
-                        <ContextMenu x:Name="MainMenu" Placement="Bottom">
-                            <MenuItem Header="Add Application / Shortcut…" Click="OnAddFile_Click"/>
-                            <MenuItem Header="Add Folder…"                  Click="OnAddFolder_Click"/>
-                            <Separator/>
-                            <MenuItem Header="Settings"                     Click="OnSettings_Click"/>
-                            <Separator/>
-                            <MenuItem Header="Minimize to Tray"             Click="OnMinimize_Click"/>
-                            <MenuItem Header="Close"                        Click="OnClose_Click"/>
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
+                <!-- Single ⋮ menu button -->
+                <StackPanel x:Name="ButtonsHost"
+                            Orientation="Horizontal"
+                            Margin="4,4,6,4">
+                    <Button x:Name="MenuBtn"
+                            Style="{StaticResource ChromeButton}"
+                            Content="&#xE712;"
+                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                            FontSize="16"
+                            ToolTip="Menu"
+                            Click="OnMenu_Click">
+                        <Button.ContextMenu>
+                            <ContextMenu x:Name="MainMenu" Placement="Bottom">
+                                <MenuItem Header="Add Application / Shortcut…" Click="OnAddFile_Click"/>
+                                <MenuItem Header="Add Folder…"                  Click="OnAddFolder_Click"/>
+                                <Separator/>
+                                <MenuItem Header="Settings"                     Click="OnSettings_Click"/>
+                                <Separator/>
+                                <MenuItem Header="Minimize to Tray"             Click="OnMinimize_Click"/>
+                                <MenuItem Header="Close"                        Click="OnClose_Click"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
+
             </StackPanel>
 
-        </StackPanel>
+            <!-- Resize grip — repositioned in code for vertical vs horizontal mode -->
+            <Border x:Name="ResizeGrip"
+                    Width="8"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Stretch"
+                    Background="Transparent"
+                    Cursor="SizeWE"
+                    MouseLeftButtonDown="OnGrip_Down"
+                    MouseMove="OnGrip_Move"
+                    MouseLeftButtonUp="OnGrip_Up">
+                <StackPanel x:Name="GripDots"
+                            Orientation="Vertical"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <Ellipse Width="3" Height="3" Fill="{StaticResource ForegroundDim}" Margin="0,2"/>
+                    <Ellipse Width="3" Height="3" Fill="{StaticResource ForegroundDim}" Margin="0,2"/>
+                    <Ellipse Width="3" Height="3" Fill="{StaticResource ForegroundDim}" Margin="0,2"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
     </Border>
 </Window>

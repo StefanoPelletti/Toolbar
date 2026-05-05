@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using Microsoft.Win32;
 using Toolbar.ViewModels;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
 namespace Toolbar;
 
@@ -42,6 +43,12 @@ public partial class SettingsWindow : Window
 
     private void OnClose(object sender, RoutedEventArgs e) => DialogResult = false;
 
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape) DialogResult = false;
+        base.OnKeyDown(e);
+    }
+
     private static void ApplyBootSetting(bool enable)
     {
         try
@@ -51,7 +58,7 @@ public partial class SettingsWindow : Window
 
             if (enable)
             {
-                var exe = Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+                var exe = Environment.ProcessPath ?? AppContext.BaseDirectory;
                 key.SetValue(AppName, $"\"{exe}\"");
             }
             else

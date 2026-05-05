@@ -5,7 +5,8 @@
              >
     <Application.Resources>
         <ResourceDictionary>
-            <SolidColorBrush x:Key="BarBackground" Color="#1E1E1E"/>
+            <SolidColorBrush x:Key="BarBackground"    Color="#1E1E1E"/>
+            <SolidColorBrush x:Key="DialogBackground" Color="#252526"/>
             <SolidColorBrush x:Key="BarBorder" Color="#3C3C3C"/>
             <SolidColorBrush x:Key="TileHover" Color="#2D2D30"/>
             <SolidColorBrush x:Key="TilePressed" Color="#3E3E42"/>

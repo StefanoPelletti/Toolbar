@@ -168,10 +168,6 @@ public partial class MainWindow : Window
         _vm.CrossAxisCount = newCount;
         ApplyOrientation(_vm.IsVertical);
 
-        // Keep the window anchored: adjust position so the opposite edge stays still
-        if (_vm.IsVertical)
-            Left = Left; // width grows rightward — no adjustment needed
-        // In horizontal mode height grows downward — no adjustment needed either
     }
 
     private void OnGrip_Up(object sender, MouseButtonEventArgs e)

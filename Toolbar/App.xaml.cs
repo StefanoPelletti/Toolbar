@@ -49,7 +49,7 @@ public partial class App : Application
         try
         {
             icon = System.Drawing.Icon.ExtractAssociatedIcon(
-                Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location)
+                Environment.ProcessPath ?? AppContext.BaseDirectory)
                 ?? System.Drawing.SystemIcons.Application;
         }
         catch
@@ -88,11 +88,7 @@ public partial class App : Application
             mw.OpenSettings();
     }
 
-    private void ExitApp()
-    {
-        _trayIcon?.Dispose();
-        Shutdown();
-    }
+    private void ExitApp() => Shutdown(); // OnExit handles cleanup
 
     protected override void OnExit(ExitEventArgs e)
     {

@@ -8,8 +8,8 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner">
 
-    <Border Background="#252526"
-            BorderBrush="#3C3C3C"
+    <Border Background="{StaticResource DialogBackground}"
+            BorderBrush="{StaticResource BarBorder}"
             BorderThickness="1"
             CornerRadius="6">
         <Grid>
@@ -25,7 +25,7 @@
                     Background="Transparent">
                 <Grid Margin="12,0,4,0">
                     <TextBlock Text="Rename shortcut"
-                               Foreground="#E6E6E6"
+                               Foreground="{StaticResource ForegroundPrimary}"
                                FontSize="12"
                                VerticalAlignment="Center"/>
                     <Button HorizontalAlignment="Right"
@@ -49,9 +49,9 @@
 
                 <TextBox x:Name="NameBox"
                          Grid.Row="0"
-                         Background="#3C3C3C"
-                         Foreground="#E6E6E6"
-                         CaretBrush="#E6E6E6"
+                         Background="{StaticResource BarBorder}"
+                         Foreground="{StaticResource ForegroundPrimary}"
+                         CaretBrush="{StaticResource ForegroundPrimary}"
                          BorderBrush="#555555"
                          BorderThickness="1"
                          Padding="8,5"
@@ -68,8 +68,8 @@
                             Margin="0,0,8,0"
                             Padding="0,5"
                             Click="OnCancel"
-                            Background="#3C3C3C"
-                            Foreground="#E6E6E6"
+                            Background="{StaticResource BarBorder}"
+                            Foreground="{StaticResource ForegroundPrimary}"
                             BorderBrush="#555555"
                             BorderThickness="1"/>
                     <Button x:Name="OkBtn"

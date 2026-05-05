@@ -8,8 +8,8 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner">
 
-    <Border Background="#252526"
-            BorderBrush="#3C3C3C"
+    <Border Background="{StaticResource DialogBackground}"
+            BorderBrush="{StaticResource BarBorder}"
             BorderThickness="1"
             CornerRadius="6">
         <Grid>
@@ -25,7 +25,7 @@
                     Background="Transparent">
                 <Grid Margin="12,0,4,0">
                     <TextBlock Text="Settings"
-                               Foreground="#E6E6E6"
+                               Foreground="{StaticResource ForegroundPrimary}"
                                FontSize="12"
                                VerticalAlignment="Center"/>
                     <Button HorizontalAlignment="Right"
@@ -43,15 +43,15 @@
             <StackPanel Grid.Row="1" Margin="16,10,16,12">
                 <CheckBox x:Name="AlwaysOnTopBox"
                           Content="Always on top"
-                          Foreground="#E6E6E6"
+                          Foreground="{StaticResource ForegroundPrimary}"
                           Margin="0,0,0,8"/>
                 <CheckBox x:Name="LaunchAtBootBox"
                           Content="Launch at Windows startup"
-                          Foreground="#E6E6E6"
+                          Foreground="{StaticResource ForegroundPrimary}"
                           Margin="0,0,0,8"/>
                 <CheckBox x:Name="VerticalBox"
                           Content="Vertical layout"
-                          Foreground="#E6E6E6"
+                          Foreground="{StaticResource ForegroundPrimary}"
                           Margin="0,0,0,12"/>
                 <Button Content="Save"
                         Width="72"

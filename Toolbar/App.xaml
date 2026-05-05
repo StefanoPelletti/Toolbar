@@ -78,8 +78,7 @@
                                     BorderBrush="{StaticResource BarBorder}"
                                     BorderThickness="1"
                                     CornerRadius="6"
-                                    Padding="0,4"
-                                    Effect="{DynamicResource {x:Static SystemParameters.DropShadowKey}}">
+                                    Padding="0,4">
                                 <StackPanel IsItemsHost="True"
                                             KeyboardNavigation.DirectionalNavigation="Cycle"/>
                             </Border>

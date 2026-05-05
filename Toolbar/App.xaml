@@ -90,6 +90,8 @@
             <Style TargetType="MenuItem">
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="Foreground" Value="{StaticResource ForegroundPrimary}"/>
+                <Setter Property="FontFamily" Value="Segoe UI"/>
+                <Setter Property="FontSize" Value="13"/>
                 <Setter Property="Padding" Value="16,7"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Template">
@@ -100,7 +102,10 @@
                                     Padding="{TemplateBinding Padding}"
                                     Margin="4,1">
                                 <ContentPresenter ContentSource="Header"
-                                                  RecognizesAccessKey="True"/>
+                                                  RecognizesAccessKey="True"
+                                                  TextElement.FontFamily="Segoe UI"
+                                                  TextElement.FontSize="13"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsHighlighted" Value="True">

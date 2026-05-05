@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Microsoft.Win32;
 using Toolbar.Controls;
@@ -60,7 +61,6 @@ public partial class MainWindow : Window
 
     internal void ApplyOrientation(bool vertical)
     {
-        // Reset SizeToContent before changing dimensions to avoid layout conflicts
         SizeToContent = SizeToContent.Manual;
 
         if (vertical)
@@ -75,15 +75,8 @@ public partial class MainWindow : Window
 
             ShortcutsHost.Margin = new Thickness(4, 4, 4, 2);
             ButtonsHost.Margin = new Thickness(4, 2, 4, 6);
-            AddTile.Margin = new Thickness(0, 2, 0, 2);
 
-            // Buttons top-to-bottom: ✕ ─ ⚙
-            ButtonsHost.Children.Clear();
-            ButtonsHost.Children.Add(CloseBtn);
-            ButtonsHost.Children.Add(MinBtn);
-            ButtonsHost.Children.Add(SettingsBtn);
-
-            // Panel order: buttons on top, tiles below
+            // Menu button on top, tiles below
             OuterPanel.Children.Clear();
             OuterPanel.Children.Add(ButtonsHost);
             OuterPanel.Children.Add(ShortcutsHost);
@@ -100,21 +93,13 @@ public partial class MainWindow : Window
 
             ShortcutsHost.Margin = new Thickness(6, 4, 4, 4);
             ButtonsHost.Margin = new Thickness(4, 4, 6, 4);
-            AddTile.Margin = new Thickness(2, 0, 2, 0);
 
-            // Buttons left-to-right: ⚙ ─ ✕
-            ButtonsHost.Children.Clear();
-            ButtonsHost.Children.Add(SettingsBtn);
-            ButtonsHost.Children.Add(MinBtn);
-            ButtonsHost.Children.Add(CloseBtn);
-
-            // Panel order: tiles on left, buttons on right
+            // Tiles on the left, menu button on the right
             OuterPanel.Children.Clear();
             OuterPanel.Children.Add(ShortcutsHost);
             OuterPanel.Children.Add(ButtonsHost);
         }
 
-        // Update tile margins so spacing stays correct in both directions
         foreach (var tile in Tiles)
             tile.Margin = vertical ? new Thickness(0, 2, 0, 2) : new Thickness(2, 0, 2, 0);
     }
@@ -137,7 +122,7 @@ public partial class MainWindow : Window
         tile.Drop += OnTile_Drop;
         tile.DragOver += OnTile_DragOver;
 
-        int insertAt = atIndex ?? ShortcutsHost.Children.IndexOf(AddTile);
+        int insertAt = atIndex ?? ShortcutsHost.Children.Count;
         ShortcutsHost.Children.Insert(insertAt, tile);
     }
 
@@ -155,7 +140,6 @@ public partial class MainWindow : Window
         else
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
-            // Strip extension only for executables and shortcuts; keep it for everything else
             name = ext is ".exe" or ".lnk"
                 ? Path.GetFileNameWithoutExtension(path)
                 : Path.GetFileName(path);
@@ -245,15 +229,16 @@ public partial class MainWindow : Window
             DragMove();
     }
 
-    private void OnAddTile_Click(object sender, MouseButtonEventArgs e)
+    // ── Menu button ──────────────────────────────────────────────────────────
+
+    private void OnMenu_Click(object sender, RoutedEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left) return;
-        OpenFilePicker();
+        MenuBtn.ContextMenu.PlacementTarget = MenuBtn;
+        MenuBtn.ContextMenu.Placement = _vm.IsVertical ? PlacementMode.Left : PlacementMode.Bottom;
+        MenuBtn.ContextMenu.IsOpen = true;
     }
 
-    private void OnAddFile_Click(object sender, RoutedEventArgs e) => OpenFilePicker();
-
-    private void OpenFilePicker()
+    private void OnAddFile_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
         {
@@ -289,19 +274,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnAddTile_MouseEnter(object sender, MouseEventArgs e) =>
-        AddTile.Background = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TileHover"];
-
-    private void OnAddTile_MouseLeave(object sender, MouseEventArgs e) =>
-        AddTile.Background = System.Windows.Media.Brushes.Transparent;
-
-    private void OnMinimize_Click(object sender, RoutedEventArgs e)
-    {
-        // Hide the window entirely — tray icon is the restore mechanism.
-        // Using WindowState.Minimized on a transparent WindowStyle.None window
-        // causes erratic behavior (window moves to wrong monitor, taskbar entries, etc.)
-        Hide();
-    }
+    private void OnMinimize_Click(object sender, RoutedEventArgs e) => Hide();
 
     private void OnClose_Click(object sender, RoutedEventArgs e)
     {

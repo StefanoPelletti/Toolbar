@@ -11,6 +11,7 @@ using Button = System.Windows.Controls.Button;
 using DataFormats = System.Windows.DataFormats;
 using DragDropEffects = System.Windows.DragDropEffects;
 using DragEventArgs = System.Windows.DragEventArgs;
+using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Orientation = System.Windows.Controls.Orientation;
 
@@ -149,11 +150,15 @@ public partial class MainWindow : Window
         if (Directory.Exists(path))
         {
             name = Path.GetFileName(path.TrimEnd('\\', '/'));
-            if (string.IsNullOrEmpty(name)) name = path;
+            if (string.IsNullOrEmpty(name)) name = path; // drive root
         }
         else
         {
-            name = Path.GetFileNameWithoutExtension(path);
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            // Strip extension only for executables and shortcuts; keep it for everything else
+            name = ext is ".exe" or ".lnk"
+                ? Path.GetFileNameWithoutExtension(path)
+                : Path.GetFileName(path);
         }
 
         var shortcut = new ShortcutViewModel { Path = path, DisplayName = name };
@@ -189,18 +194,7 @@ public partial class MainWindow : Window
 
         var files = (string[])e.Data.GetData(DataFormats.FileDrop);
         foreach (var f in files)
-        {
-            if (Directory.Exists(f))
-            {
-                AddShortcut(f);
-            }
-            else
-            {
-                var ext = Path.GetExtension(f).ToLowerInvariant();
-                if (ext is ".exe" or ".lnk")
-                    AddShortcut(f);
-            }
-        }
+            AddShortcut(f);
     }
 
     // ── Drag-drop: tile reorder ──────────────────────────────────────────────
@@ -263,8 +257,9 @@ public partial class MainWindow : Window
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Add shortcut",
-            Filter = "Applications and shortcuts|*.exe;*.lnk|All files|*.*",
+            Title = "Add shortcut — pick any file",
+            Filter = "All files|*.*|Applications|*.exe|Shortcuts|*.lnk",
+            FilterIndex = 1,
             CheckFileExists = true
         };
         if (dlg.ShowDialog() == true)
@@ -293,6 +288,12 @@ public partial class MainWindow : Window
             PersistShortcuts();
         }
     }
+
+    private void OnAddTile_MouseEnter(object sender, MouseEventArgs e) =>
+        AddTile.Background = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TileHover"];
+
+    private void OnAddTile_MouseLeave(object sender, MouseEventArgs e) =>
+        AddTile.Background = System.Windows.Media.Brushes.Transparent;
 
     private void OnMinimize_Click(object sender, RoutedEventArgs e)
     {

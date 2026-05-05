@@ -1,9 +1,14 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
 using Toolbar.ViewModels;
 using DragDropEffects = System.Windows.DragDropEffects;
+using MessageBox = System.Windows.MessageBox;
+using MessageBoxButton = System.Windows.MessageBoxButton;
+using MessageBoxImage = System.Windows.MessageBoxImage;
+using MessageBoxResult = System.Windows.MessageBoxResult;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Point = System.Windows.Point;
@@ -38,6 +43,42 @@ public partial class ShortcutTile : UserControl
         Bd.Background = System.Windows.Media.Brushes.Transparent;
     }
 
+    // ── Launch with broken-shortcut detection ────────────────────────────────
+
+    private void TryLaunch()
+    {
+        var path = Vm.Path;
+
+        // Shell special items (e.g. "::{CLSID}") are not on the file system — skip existence check
+        bool isShellItem = path.StartsWith("::");
+        if (!isShellItem && !File.Exists(path) && !Directory.Exists(path))
+        {
+            OfferRemoveBroken();
+            return;
+        }
+
+        try
+        {
+            Vm.LaunchCommand.Execute(null);
+        }
+        catch
+        {
+            OfferRemoveBroken();
+        }
+    }
+
+    private void OfferRemoveBroken()
+    {
+        var result = MessageBox.Show(
+            $"\"{Vm.DisplayName}\" could not be found or opened.\n\nRemove this shortcut?",
+            "Shortcut unavailable",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result == MessageBoxResult.Yes)
+            ParentWindow?.RemoveShortcut(Vm);
+    }
+
     // ── Left-click: launch ──────────────────────────────────────────────────
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -51,7 +92,7 @@ public partial class ShortcutTile : UserControl
     {
         base.OnMouseLeftButtonUp(e);
         if (_dragOccurred) { _dragOccurred = false; return; }
-        Vm.LaunchCommand.Execute(null);
+        TryLaunch();
         e.Handled = true;
     }
 
@@ -75,8 +116,7 @@ public partial class ShortcutTile : UserControl
 
     // ── Context menu ────────────────────────────────────────────────────────
 
-    private void OnContextLaunch(object sender, RoutedEventArgs e) =>
-        Vm.LaunchCommand.Execute(null);
+    private void OnContextLaunch(object sender, RoutedEventArgs e) => TryLaunch();
 
     private void OnContextRename(object sender, RoutedEventArgs e)
     {

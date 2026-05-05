@@ -41,7 +41,9 @@
                         Margin="2,0,2,0"
                         Cursor="Hand"
                         MouseLeftButtonDown="OnAddTile_Click"
-                        ToolTip="Left-click: add app/shortcut  •  Right-click: add folder">
+                        MouseEnter="OnAddTile_MouseEnter"
+                        MouseLeave="OnAddTile_MouseLeave"
+                        ToolTip="Left-click: add file/app  •  Right-click: add folder">
                     <Border.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="Add Application / Shortcut…" Click="OnAddFile_Click"/>

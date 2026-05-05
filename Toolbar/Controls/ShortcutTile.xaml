@@ -6,7 +6,11 @@
              mc:Ignorable="d"
              Width="48" Height="48"
              Cursor="Hand"
-             ToolTip="{Binding DisplayName}">
+             ToolTip="{Binding DisplayName}"
+             RenderTransformOrigin="0.5,0.5">
+    <UserControl.RenderTransform>
+        <ScaleTransform x:Name="TileScale" ScaleX="1" ScaleY="1"/>
+    </UserControl.RenderTransform>
 
     <Border x:Name="Bd"
             Background="Transparent"

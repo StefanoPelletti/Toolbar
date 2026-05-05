@@ -164,6 +164,8 @@ public partial class MainWindow : Window
     private List<ShortcutTile> Tiles =>
         ShortcutsHost.Children.OfType<ShortcutTile>().ToList();
 
+    private ShortcutTile? _dragOverTile;
+
     // ── Drag-drop: files / folders onto bar ─────────────────────────────────
 
     private void OnWindow_DragOver(object sender, DragEventArgs e)
@@ -185,15 +187,26 @@ public partial class MainWindow : Window
 
     private void OnTile_DragOver(object sender, DragEventArgs e)
     {
-        if (e.Data.GetDataPresent(typeof(ShortcutViewModel)))
+        if (!e.Data.GetDataPresent(typeof(ShortcutViewModel))) return;
+
+        e.Effects = DragDropEffects.Move;
+        e.Handled = true;
+
+        // Highlight the tile we're hovering over as the drop target
+        if (sender is ShortcutTile tile && tile != _dragOverTile)
         {
-            e.Effects = DragDropEffects.Move;
-            e.Handled = true;
+            _dragOverTile?.EndDragOver();
+            _dragOverTile = tile;
+            tile.BeginDragOver();
         }
     }
 
     private void OnTile_Drop(object sender, DragEventArgs e)
     {
+        // Clear drop-target highlight regardless of outcome
+        _dragOverTile?.EndDragOver();
+        _dragOverTile = null;
+
         if (!e.Data.GetDataPresent(typeof(ShortcutViewModel))) return;
         if (sender is not ShortcutTile targetTile) return;
 

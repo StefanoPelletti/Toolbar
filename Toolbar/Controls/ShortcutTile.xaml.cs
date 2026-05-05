@@ -2,6 +2,8 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Microsoft.Win32;
 using Toolbar.ViewModels;
 using DragDropEffects = System.Windows.DragDropEffects;
@@ -29,18 +31,37 @@ public partial class ShortcutTile : UserControl
         InitializeComponent();
     }
 
+    // ── Scale animation helper ───────────────────────────────────────────────
+
+    private void AnimateScale(double to, double ms = 120,
+        EasingMode easing = EasingMode.EaseOut)
+    {
+        var fn  = new CubicEase { EasingMode = easing };
+        var dur = TimeSpan.FromMilliseconds(ms);
+        TileScale.BeginAnimation(ScaleTransform.ScaleXProperty,
+            new DoubleAnimation(to, dur) { EasingFunction = fn });
+        TileScale.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(to, dur) { EasingFunction = fn });
+    }
+
+    // Called by MainWindow to mark this tile as the current drop target
+    internal void BeginDragOver() => AnimateScale(1.18, 110);
+    internal void EndDragOver()   => AnimateScale(1.0,  160);
+
     // ── Hover highlight ──────────────────────────────────────────────────────
 
     protected override void OnMouseEnter(MouseEventArgs e)
     {
         base.OnMouseEnter(e);
-        Bd.Background = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TileHover"];
+        Bd.Background = (System.Windows.Media.Brush)
+            System.Windows.Application.Current.Resources["TileHover"];
     }
 
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         base.OnMouseLeave(e);
         Bd.Background = System.Windows.Media.Brushes.Transparent;
+        AnimateScale(1.0, 150); // spring back if mouse leaves while pressed
     }
 
     // ── Launch with broken-shortcut detection ────────────────────────────────
@@ -49,7 +70,6 @@ public partial class ShortcutTile : UserControl
     {
         var path = Vm.Path;
 
-        // Shell special items (e.g. "::{CLSID}") are not on the file system — skip existence check
         bool isShellItem = path.StartsWith("::");
         if (!isShellItem && !File.Exists(path) && !Directory.Exists(path))
         {
@@ -57,14 +77,8 @@ public partial class ShortcutTile : UserControl
             return;
         }
 
-        try
-        {
-            Vm.LaunchCommand.Execute(null);
-        }
-        catch
-        {
-            OfferRemoveBroken();
-        }
+        try { Vm.LaunchCommand.Execute(null); }
+        catch  { OfferRemoveBroken(); }
     }
 
     private void OfferRemoveBroken()
@@ -79,18 +93,20 @@ public partial class ShortcutTile : UserControl
             ParentWindow?.RemoveShortcut(Vm);
     }
 
-    // ── Left-click: launch ──────────────────────────────────────────────────
+    // ── Left-click: press animation + launch ────────────────────────────────
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
         _dragOccurred = false;
         _dragStart = e.GetPosition(this);
+        AnimateScale(0.85, 100, EasingMode.EaseIn); // press down
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonUp(e);
+        AnimateScale(1.0, 180); // spring back
         if (_dragOccurred) { _dragOccurred = false; return; }
         TryLaunch();
         e.Handled = true;
@@ -103,14 +119,24 @@ public partial class ShortcutTile : UserControl
         base.OnMouseMove(e);
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
-        var pos = e.GetPosition(this);
+        var pos  = e.GetPosition(this);
         var diff = pos - _dragStart;
 
         if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance) return;
 
         _dragOccurred = true;
-        DragDrop.DoDragDrop(this, Vm, DragDropEffects.Move);
+
+        // Tile looks "picked up" while dragging
+        Opacity = 0.45;
+        AnimateScale(0.80, 120);
+
+        DragDrop.DoDragDrop(this, Vm, DragDropEffects.Move); // blocks until drop
+
+        // Restore once drag finishes
+        Opacity = 1.0;
+        AnimateScale(1.0, 200);
+
         e.Handled = true;
     }
 

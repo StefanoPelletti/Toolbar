@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
-using Microsoft.Win32;
+using Toolbar.Services;
 using Toolbar.ViewModels;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
@@ -8,9 +8,6 @@ namespace Toolbar;
 
 public partial class SettingsWindow : Window
 {
-    private const string RegistryRunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-    private const string AppName = "Toolbar";
-
     private readonly MainViewModel _vm;
 
     public SettingsWindow(MainViewModel vm)
@@ -36,7 +33,7 @@ public partial class SettingsWindow : Window
 
         bool bootEnabled = LaunchAtBootBox.IsChecked == true;
         _vm.LaunchAtBoot = bootEnabled;
-        ApplyBootSetting(bootEnabled);
+        AutoStartService.Apply(bootEnabled);
 
         DialogResult = true;
     }
@@ -47,25 +44,5 @@ public partial class SettingsWindow : Window
     {
         if (e.Key == Key.Escape) DialogResult = false;
         base.OnKeyDown(e);
-    }
-
-    private static void ApplyBootSetting(bool enable)
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(RegistryRunKey, writable: true);
-            if (key is null) return;
-
-            if (enable)
-            {
-                var exe = Environment.ProcessPath ?? AppContext.BaseDirectory;
-                key.SetValue(AppName, $"\"{exe}\"");
-            }
-            else
-            {
-                key.DeleteValue(AppName, throwOnMissingValue: false);
-            }
-        }
-        catch { }
     }
 }

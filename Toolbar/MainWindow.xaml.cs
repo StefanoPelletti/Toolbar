@@ -30,6 +30,10 @@ public partial class MainWindow : Window
     // (tile 48 + 2px margin each side = 52)
     private const int TileStep = 52;
 
+    // Cached display-layout signature for the current monitor configuration.
+    // Updated when SystemEvents.DisplaySettingsChanged fires.
+    private string _displaySignature = DisplayLayout.Signature();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -38,8 +42,24 @@ public partial class MainWindow : Window
         _config = _store.Load();
         _vm.LoadFrom(_config);
 
-        Left = _config.Window.Left;
-        Top = _config.Window.Top;
+        // Auto-start: refresh the registry entry every launch so a relocated
+        // portable .exe self-corrects, and so new installs auto-enroll.
+        AutoStartService.Apply(_vm.LaunchAtBoot);
+
+        // One-shot migration from the legacy single-position field.
+        if (_config.WindowPositions.Count == 0 &&
+            (_config.Window.Left != 100 || _config.Window.Top != 100))
+        {
+            _config.WindowPositions[_displaySignature] = new WindowPosition
+            {
+                Left = _config.Window.Left,
+                Top  = _config.Window.Top
+            };
+        }
+
+        var pos = ResolvePositionForSignature(_displaySignature);
+        Left = pos.Left;
+        Top  = pos.Top;
 
         Topmost = _vm.AlwaysOnTop;
         _vm.PropertyChanged += (_, e) =>
@@ -51,16 +71,50 @@ public partial class MainWindow : Window
         foreach (var shortcut in _vm.Shortcuts)
             InsertTile(shortcut);
 
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        Closed += (_, _) => SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+
         Loaded += OnLoaded;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApplyOrientation(_vm.IsVertical);
+    }
 
-        var screen = SystemParameters.WorkArea;
-        Left = Math.Clamp(Left, screen.Left, screen.Right - ActualWidth);
-        Top  = Math.Clamp(Top,  screen.Top,  screen.Bottom - ActualHeight);
+    private WindowPosition ResolvePositionForSignature(string signature)
+    {
+        if (_config.WindowPositions.TryGetValue(signature, out var stored)
+            && DisplayLayout.IsVisibleOn(stored.Left, stored.Top, ActualWidth, ActualHeight))
+        {
+            return stored;
+        }
+
+        var (dl, dt) = DisplayLayout.DefaultPosition();
+        var fresh = new WindowPosition { Left = dl, Top = dt };
+        _config.WindowPositions[signature] = fresh;
+        _store.Save(_config);
+        return fresh;
+    }
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            // Capture current position under the OLD signature first, so returning to
+            // that layout later restores what the user had.
+            _config.WindowPositions[_displaySignature] = new WindowPosition
+            {
+                Left = Left,
+                Top  = Top
+            };
+
+            _displaySignature = DisplayLayout.Signature();
+            var pos = ResolvePositionForSignature(_displaySignature);
+            Left = pos.Left;
+            Top  = pos.Top;
+            _store.Save(_config);
+        });
     }
 
     // ── Orientation ──────────────────────────────────────────────────────────
@@ -379,8 +433,13 @@ public partial class MainWindow : Window
     protected override void OnLocationChanged(EventArgs e)
     {
         base.OnLocationChanged(e);
-        _config.Window.Left = Left;
-        _config.Window.Top  = Top;
+        if (!_config.WindowPositions.TryGetValue(_displaySignature, out var entry))
+        {
+            entry = new WindowPosition();
+            _config.WindowPositions[_displaySignature] = entry;
+        }
+        entry.Left = Left;
+        entry.Top  = Top;
         _store.Save(_config);
     }
 

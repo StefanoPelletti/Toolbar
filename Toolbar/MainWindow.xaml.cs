@@ -94,6 +94,27 @@ public partial class MainWindow : Window
     {
         OuterPanel.LayoutTransform = new System.Windows.Media.ScaleTransform(_vm.Scale, _vm.Scale);
         ApplyOrientation(_vm.IsVertical);
+
+        // Width/Height assigned above don't reach ActualWidth/Height until WPF's
+        // next layout pass. Queue the clamp at Loaded priority so it runs after
+        // that pass, otherwise we'd be clamping against the pre-scale size.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ClampToVisibleArea);
+    }
+
+    private void ClampToVisibleArea()
+    {
+        var screen = System.Windows.Forms.Screen.FromPoint(
+            new System.Drawing.Point((int)Left, (int)Top));
+        var wa = screen.WorkingArea;
+
+        // Skip the clamp if the (scaled) window is larger than the working area —
+        // Math.Clamp would otherwise see max < min and throw. The bar already
+        // looks broken at that point; better to leave the user in control than
+        // wedge it against an edge.
+        if (ActualWidth  > wa.Width  || ActualHeight > wa.Height) return;
+
+        Left = Math.Clamp(Left, wa.Left, wa.Right  - ActualWidth);
+        Top  = Math.Clamp(Top,  wa.Top,  wa.Bottom - ActualHeight);
     }
 
     private WindowPosition ResolvePositionForSignature(string signature)
@@ -101,27 +122,37 @@ public partial class MainWindow : Window
         if (_config.WindowPositions.TryGetValue(signature, out var stored)
             && DisplayLayout.IsVisibleOn(stored.Left, stored.Top, ActualWidth, ActualHeight))
         {
+            stored.LastUsed = DateTime.UtcNow;
             return stored;
         }
 
-        // No exact match for this layout — reuse any previously-saved position that
-        // still lands on a connected monitor, so disconnecting/rearranging displays
-        // doesn't dump the window back onto the primary at (100, 100).
-        foreach (var candidate in _config.WindowPositions.Values)
+        // No exact match for this layout — reuse the most-recently-used position
+        // that still lands on a connected monitor, so disconnecting/rearranging
+        // displays doesn't dump the window back onto the primary at (100, 100).
+        // Ordering by LastUsed (descending) makes the choice deterministic across
+        // restarts, instead of relying on dictionary enumeration order.
+        var bestCandidate = _config.WindowPositions.Values
+            .Where(c => DisplayLayout.IsVisibleOn(c.Left, c.Top, ActualWidth, ActualHeight))
+            .OrderByDescending(c => c.LastUsed)
+            .FirstOrDefault();
+
+        if (bestCandidate is not null)
         {
-            if (DisplayLayout.IsVisibleOn(candidate.Left, candidate.Top, ActualWidth, ActualHeight))
+            var reused = new WindowPosition
             {
-                var reused = new WindowPosition { Left = candidate.Left, Top = candidate.Top };
-                _config.WindowPositions[signature] = reused;
-                _store.Save(_config);
-                return reused;
-            }
+                Left = bestCandidate.Left,
+                Top  = bestCandidate.Top,
+                LastUsed = DateTime.UtcNow,
+            };
+            _config.WindowPositions[signature] = reused;
+            // No Save here: setting Left/Top in the caller fires OnLocationChanged
+            // which persists the entry. Saving twice on cold start was wasted work.
+            return reused;
         }
 
         var (dl, dt) = DisplayLayout.DefaultPosition();
-        var fresh = new WindowPosition { Left = dl, Top = dt };
+        var fresh = new WindowPosition { Left = dl, Top = dt, LastUsed = DateTime.UtcNow };
         _config.WindowPositions[signature] = fresh;
-        _store.Save(_config);
         return fresh;
     }
 
@@ -149,10 +180,12 @@ public partial class MainWindow : Window
 
     internal void ApplyOrientation(bool vertical)
     {
-        // Clamp CrossAxisCount to valid range for current tile count
+        // Clamp for rendering only — never write back. The user's chosen
+        // CrossAxisCount stays in the VM intact, so deleting shortcuts down to
+        // fewer than that count and re-adding them later restores the original
+        // layout instead of leaving it stuck at the smaller value.
         int maxCount = Math.Max(1, _vm.Shortcuts.Count);
-        _vm.CrossAxisCount = Math.Clamp(_vm.CrossAxisCount, 1, maxCount);
-        int n = _vm.CrossAxisCount;
+        int n = Math.Clamp(_vm.CrossAxisCount, 1, maxCount);
 
         SizeToContent = SizeToContent.Manual;
 
@@ -295,6 +328,9 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             if (shortcut.Icon is not null) return;
+            // Skip the 50-200 ms shell/COM call if the user removed the
+            // shortcut while this Background-priority work was queued.
+            if (!_vm.Shortcuts.Contains(shortcut)) return;
             shortcut.Icon = shortcut.CustomIconPath is not null
                 ? IconExtractor.FromFile(shortcut.CustomIconPath)
                 : IconExtractor.FromPath(shortcut.Path);
@@ -335,13 +371,10 @@ public partial class MainWindow : Window
 
         _vm.Shortcuts.Remove(shortcut);
 
-        // Clamp cross-axis count in case we removed the last tile in a column/row
-        int maxCount = Math.Max(1, _vm.Shortcuts.Count);
-        if (_vm.CrossAxisCount > maxCount)
-        {
-            _vm.CrossAxisCount = maxCount;
-            ApplyOrientation(_vm.IsVertical);
-        }
+        // Re-layout in case we removed the last tile in a column/row. The VM's
+        // CrossAxisCount is left alone — ApplyOrientation clamps for rendering
+        // only, so re-adding shortcuts later restores the preferred layout.
+        ApplyOrientation(_vm.IsVertical);
 
         PersistShortcuts();
     }
@@ -496,6 +529,7 @@ public partial class MainWindow : Window
         }
         entry.Left = Left;
         entry.Top  = Top;
+        entry.LastUsed = DateTime.UtcNow;
         _store.Save(_config);
     }
 

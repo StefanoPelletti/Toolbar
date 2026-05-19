@@ -4,6 +4,12 @@ public class WindowPosition
 {
     public double Left { get; set; } = 100;
     public double Top { get; set; } = 100;
+
+    // Used to pick the most-recently-used fallback position when reopening
+    // under a layout that has no exact saved match. Older configs deserialize
+    // with DateTime.MinValue, which sorts last — fine, the active entry gets
+    // refreshed on first save.
+    public DateTime LastUsed { get; set; } = DateTime.UtcNow;
 }
 
 public class AppConfig

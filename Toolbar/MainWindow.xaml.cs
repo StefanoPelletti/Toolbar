@@ -149,10 +149,12 @@ public partial class MainWindow : Window
 
     internal void ApplyOrientation(bool vertical)
     {
-        // Clamp CrossAxisCount to valid range for current tile count
+        // Clamp for rendering only — never write back. The user's chosen
+        // CrossAxisCount stays in the VM intact, so deleting shortcuts down to
+        // fewer than that count and re-adding them later restores the original
+        // layout instead of leaving it stuck at the smaller value.
         int maxCount = Math.Max(1, _vm.Shortcuts.Count);
-        _vm.CrossAxisCount = Math.Clamp(_vm.CrossAxisCount, 1, maxCount);
-        int n = _vm.CrossAxisCount;
+        int n = Math.Clamp(_vm.CrossAxisCount, 1, maxCount);
 
         SizeToContent = SizeToContent.Manual;
 
@@ -335,13 +337,10 @@ public partial class MainWindow : Window
 
         _vm.Shortcuts.Remove(shortcut);
 
-        // Clamp cross-axis count in case we removed the last tile in a column/row
-        int maxCount = Math.Max(1, _vm.Shortcuts.Count);
-        if (_vm.CrossAxisCount > maxCount)
-        {
-            _vm.CrossAxisCount = maxCount;
-            ApplyOrientation(_vm.IsVertical);
-        }
+        // Re-layout in case we removed the last tile in a column/row. The VM's
+        // CrossAxisCount is left alone — ApplyOrientation clamps for rendering
+        // only, so re-adding shortcuts later restores the preferred layout.
+        ApplyOrientation(_vm.IsVertical);
 
         PersistShortcuts();
     }

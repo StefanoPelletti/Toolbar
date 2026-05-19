@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Windows.Threading;
 using Toolbar.Models;
 
 namespace Toolbar.Services;
@@ -32,8 +33,17 @@ public class ConfigStore
     // same path. The lock makes the second caller wait a few ms instead.
     private readonly object _flushLock = new();
 
+    // Captured at construction (UI thread). Serialization is marshaled here so
+    // the threadpool flush sees a stable AppConfig — without this, a Dictionary
+    // mutation on the UI thread mid-serialize throws "Collection was modified"
+    // and the save is silently lost.
+    private readonly Dispatcher _uiDispatcher;
+
     public ConfigStore()
     {
+        _uiDispatcher = System.Windows.Application.Current?.Dispatcher
+            ?? Dispatcher.CurrentDispatcher;
+
         _debounceTimer = new System.Threading.Timer(
             _ => Flush(_pending),
             null,
@@ -83,8 +93,17 @@ public class ConfigStore
 
             try
             {
+                // Serialize on the UI thread so the AppConfig graph (Dictionary,
+                // List) isn't being mutated concurrently. Invoke is a direct call
+                // when we're already on the UI thread (SaveImmediate path), so it
+                // adds no measurable overhead there.
+                var json = _uiDispatcher.Invoke(
+                    () => JsonSerializer.Serialize(config, JsonOptions));
+
+                // File I/O stays on whichever thread Flush was called from —
+                // typically the timer's threadpool thread — so a slow disk
+                // never freezes the UI.
                 Directory.CreateDirectory(ConfigDir);
-                var json = JsonSerializer.Serialize(config, JsonOptions);
                 File.WriteAllText(ConfigPath, json);
                 _lastFlushed = config;
             }

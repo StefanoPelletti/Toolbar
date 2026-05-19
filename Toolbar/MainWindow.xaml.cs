@@ -94,6 +94,27 @@ public partial class MainWindow : Window
     {
         OuterPanel.LayoutTransform = new System.Windows.Media.ScaleTransform(_vm.Scale, _vm.Scale);
         ApplyOrientation(_vm.IsVertical);
+
+        // Width/Height assigned above don't reach ActualWidth/Height until WPF's
+        // next layout pass. Queue the clamp at Loaded priority so it runs after
+        // that pass, otherwise we'd be clamping against the pre-scale size.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ClampToVisibleArea);
+    }
+
+    private void ClampToVisibleArea()
+    {
+        var screen = System.Windows.Forms.Screen.FromPoint(
+            new System.Drawing.Point((int)Left, (int)Top));
+        var wa = screen.WorkingArea;
+
+        // Skip the clamp if the (scaled) window is larger than the working area —
+        // Math.Clamp would otherwise see max < min and throw. The bar already
+        // looks broken at that point; better to leave the user in control than
+        // wedge it against an edge.
+        if (ActualWidth  > wa.Width  || ActualHeight > wa.Height) return;
+
+        Left = Math.Clamp(Left, wa.Left, wa.Right  - ActualWidth);
+        Top  = Math.Clamp(Top,  wa.Top,  wa.Bottom - ActualHeight);
     }
 
     private WindowPosition ResolvePositionForSignature(string signature)

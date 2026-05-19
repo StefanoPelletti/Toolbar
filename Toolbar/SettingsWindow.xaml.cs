@@ -18,7 +18,15 @@ public partial class SettingsWindow : Window
         AlwaysOnTopBox.IsChecked = vm.AlwaysOnTop;
         LaunchAtBootBox.IsChecked = vm.LaunchAtBoot;
         VerticalBox.IsChecked = vm.IsVertical;
+        ScaleSlider.Value = vm.ScaleSteps;
+        UpdateScaleLabel(vm.ScaleSteps);
     }
+
+    private void OnScaleChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        => UpdateScaleLabel((int)e.NewValue);
+
+    private void UpdateScaleLabel(int steps)
+        => ScaleLabel.Text = $"{100 + steps * 10}%";
 
     private void OnTitleBar_Drag(object sender, MouseButtonEventArgs e)
     {
@@ -30,6 +38,7 @@ public partial class SettingsWindow : Window
     {
         _vm.AlwaysOnTop = AlwaysOnTopBox.IsChecked == true;
         _vm.IsVertical = VerticalBox.IsChecked == true;
+        _vm.ScaleSteps = (int)ScaleSlider.Value;
 
         bool bootEnabled = LaunchAtBootBox.IsChecked == true;
         _vm.LaunchAtBoot = bootEnabled;

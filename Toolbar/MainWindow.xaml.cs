@@ -79,6 +79,16 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ApplyScale();
+    }
+
+    // OuterPanel uses LayoutTransform so its content participates in layout at the
+    // scaled size — measured logical pixels stay the same, only the rendered (and
+    // reported-to-parent) size grows. ApplyOrientation then bakes the same factor
+    // into the fixed cross-axis dimension so the window doesn't clip its tiles.
+    private void ApplyScale()
+    {
+        OuterPanel.LayoutTransform = new System.Windows.Media.ScaleTransform(_vm.Scale, _vm.Scale);
         ApplyOrientation(_vm.IsVertical);
     }
 
@@ -142,10 +152,14 @@ public partial class MainWindow : Window
 
         SizeToContent = SizeToContent.Manual;
 
+        // OuterPanel's host margins (8 px on the cross axis) scale with the
+        // LayoutTransform; the outer Border (1 px each side) does not.
+        double scaled = (n * TileStep + 8) * _vm.Scale + 2;
+
         if (vertical)
         {
             // Fixed width derived from column count; height auto-sizes
-            Width  = n * TileStep + 10;   // 10 = host margins (4+4) + border (1+1)
+            Width  = scaled;
             Height = double.NaN;
             SizeToContent = SizeToContent.Height;
 
@@ -172,7 +186,7 @@ public partial class MainWindow : Window
         else
         {
             // Fixed height derived from row count; width auto-sizes
-            Height = n * TileStep + 10;
+            Height = scaled;
             Width  = double.NaN;
             SizeToContent = SizeToContent.Width;
 
@@ -227,8 +241,11 @@ public partial class MainWindow : Window
             : pos.Y - _resizeStart.Y;  // vertical drag   → rows
 
         int maxCount = Math.Max(1, _vm.Shortcuts.Count);
+        // The grip lives outside OuterPanel's LayoutTransform, so its mouse delta
+        // is in window pixels — divide by the scaled tile width to get columns.
+        double step = TileStep * _vm.Scale;
         int newCount = Math.Clamp(
-            _resizeStartCount + (int)Math.Round(delta / TileStep),
+            _resizeStartCount + (int)Math.Round(delta / step),
             1, maxCount);
 
         if (newCount == _vm.CrossAxisCount) return;
@@ -440,7 +457,7 @@ public partial class MainWindow : Window
         var dlg = new SettingsWindow(_vm) { Owner = this };
         if (dlg.ShowDialog() == true)
         {
-            ApplyOrientation(_vm.IsVertical);
+            ApplyScale();
             PersistShortcuts();
         }
     }

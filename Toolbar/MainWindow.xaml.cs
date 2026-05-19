@@ -538,4 +538,13 @@ public partial class MainWindow : Window
         _vm.ApplyTo(_config);
         _store.Save(_config);
     }
+
+    // Synchronous persist for paths that exit the process immediately after
+    // (e.g. self-update restart) — the debounced Save would race the new
+    // process loading the config from disk.
+    internal void PersistImmediate()
+    {
+        _vm.ApplyTo(_config);
+        _store.SaveImmediate(_config);
+    }
 }

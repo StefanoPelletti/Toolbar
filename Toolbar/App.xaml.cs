@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Windows;
 using System.Windows.Forms;
+using Toolbar.Services;
 using Application = System.Windows.Application;
 using MessageBox = System.Windows.MessageBox;
 using MessageBoxButton = System.Windows.MessageBoxButton;
@@ -35,6 +36,8 @@ public partial class App : Application
         }
 
         base.OnStartup(e);
+
+        UpdateService.CleanupLeftover();
 
         var window = new MainWindow();
         MainWindow = window;

@@ -90,6 +90,20 @@ public partial class MainWindow : Window
             return stored;
         }
 
+        // No exact match for this layout — reuse any previously-saved position that
+        // still lands on a connected monitor, so disconnecting/rearranging displays
+        // doesn't dump the window back onto the primary at (100, 100).
+        foreach (var candidate in _config.WindowPositions.Values)
+        {
+            if (DisplayLayout.IsVisibleOn(candidate.Left, candidate.Top, ActualWidth, ActualHeight))
+            {
+                var reused = new WindowPosition { Left = candidate.Left, Top = candidate.Top };
+                _config.WindowPositions[signature] = reused;
+                _store.Save(_config);
+                return reused;
+            }
+        }
+
         var (dl, dt) = DisplayLayout.DefaultPosition();
         var fresh = new WindowPosition { Left = dl, Top = dt };
         _config.WindowPositions[signature] = fresh;

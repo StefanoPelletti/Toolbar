@@ -26,6 +26,12 @@ public class ConfigStore
     private readonly System.Threading.Timer _debounceTimer;
     private AppConfig? _pending;
 
+    // Serializes the actual file write. Timer.Change(Infinite, Infinite) does
+    // not wait for an in-flight callback, so SaveImmediate could otherwise race
+    // the threadpool flush and have two threads call File.WriteAllText on the
+    // same path. The lock makes the second caller wait a few ms instead.
+    private readonly object _flushLock = new();
+
     public ConfigStore()
     {
         _debounceTimer = new System.Threading.Timer(
@@ -53,6 +59,7 @@ public class ConfigStore
     public void Save(AppConfig config)
     {
         _pending = config;
+        lock (_flushLock) _lastFlushed = null; // mark dirty so the next flush actually writes
         _debounceTimer.Change(200, System.Threading.Timeout.Infinite);
     }
 
@@ -62,15 +69,26 @@ public class ConfigStore
         Flush(config);
     }
 
+    private AppConfig? _lastFlushed;
+
     private void Flush(AppConfig? config)
     {
         if (config is null) return;
-        try
+        lock (_flushLock)
         {
-            Directory.CreateDirectory(ConfigDir);
-            var json = JsonSerializer.Serialize(config, JsonOptions);
-            File.WriteAllText(ConfigPath, json);
+            // Cheap idempotency: if SaveImmediate just wrote this same instance
+            // and the debounce callback fires right after, skip the redundant
+            // serialize+write.
+            if (ReferenceEquals(config, _lastFlushed)) return;
+
+            try
+            {
+                Directory.CreateDirectory(ConfigDir);
+                var json = JsonSerializer.Serialize(config, JsonOptions);
+                File.WriteAllText(ConfigPath, json);
+                _lastFlushed = config;
+            }
+            catch { /* swallow — non-critical */ }
         }
-        catch { /* swallow — non-critical */ }
     }
 }

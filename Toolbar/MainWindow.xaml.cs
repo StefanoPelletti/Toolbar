@@ -122,27 +122,37 @@ public partial class MainWindow : Window
         if (_config.WindowPositions.TryGetValue(signature, out var stored)
             && DisplayLayout.IsVisibleOn(stored.Left, stored.Top, ActualWidth, ActualHeight))
         {
+            stored.LastUsed = DateTime.UtcNow;
             return stored;
         }
 
-        // No exact match for this layout — reuse any previously-saved position that
-        // still lands on a connected monitor, so disconnecting/rearranging displays
-        // doesn't dump the window back onto the primary at (100, 100).
-        foreach (var candidate in _config.WindowPositions.Values)
+        // No exact match for this layout — reuse the most-recently-used position
+        // that still lands on a connected monitor, so disconnecting/rearranging
+        // displays doesn't dump the window back onto the primary at (100, 100).
+        // Ordering by LastUsed (descending) makes the choice deterministic across
+        // restarts, instead of relying on dictionary enumeration order.
+        var bestCandidate = _config.WindowPositions.Values
+            .Where(c => DisplayLayout.IsVisibleOn(c.Left, c.Top, ActualWidth, ActualHeight))
+            .OrderByDescending(c => c.LastUsed)
+            .FirstOrDefault();
+
+        if (bestCandidate is not null)
         {
-            if (DisplayLayout.IsVisibleOn(candidate.Left, candidate.Top, ActualWidth, ActualHeight))
+            var reused = new WindowPosition
             {
-                var reused = new WindowPosition { Left = candidate.Left, Top = candidate.Top };
-                _config.WindowPositions[signature] = reused;
-                _store.Save(_config);
-                return reused;
-            }
+                Left = bestCandidate.Left,
+                Top  = bestCandidate.Top,
+                LastUsed = DateTime.UtcNow,
+            };
+            _config.WindowPositions[signature] = reused;
+            // No Save here: setting Left/Top in the caller fires OnLocationChanged
+            // which persists the entry. Saving twice on cold start was wasted work.
+            return reused;
         }
 
         var (dl, dt) = DisplayLayout.DefaultPosition();
-        var fresh = new WindowPosition { Left = dl, Top = dt };
+        var fresh = new WindowPosition { Left = dl, Top = dt, LastUsed = DateTime.UtcNow };
         _config.WindowPositions[signature] = fresh;
-        _store.Save(_config);
         return fresh;
     }
 
@@ -519,6 +529,7 @@ public partial class MainWindow : Window
         }
         entry.Left = Left;
         entry.Top  = Top;
+        entry.LastUsed = DateTime.UtcNow;
         _store.Save(_config);
     }
 

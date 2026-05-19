@@ -17,7 +17,7 @@ public static class IconExtractor
         {
             // Resolve .lnk to its target so we show the target's icon without the shortcut arrow overlay
             var iconPath = path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
-                ? ResolveLnk(path) ?? path
+                ? ResolveLnkTarget(path) ?? path
                 : path;
 
             return ShellItemImage(iconPath) ?? ShellIcon(iconPath);
@@ -115,7 +115,7 @@ public static class IconExtractor
 
     // ── .lnk resolution via IShellLink ──────────────────────────────────────
 
-    private static string? ResolveLnk(string lnkPath)
+    public static string? ResolveLnkTarget(string lnkPath)
     {
         try
         {

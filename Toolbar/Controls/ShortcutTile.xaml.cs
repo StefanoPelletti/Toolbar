@@ -77,6 +77,21 @@ public partial class ShortcutTile : UserControl
             return;
         }
 
+        // A .lnk whose file still exists but whose target was uninstalled would
+        // otherwise hit Process.Start, where the shell shows its own "missing
+        // shortcut" dialog and our try/catch never sees a failure. Check the
+        // resolved target here so we can offer to remove the dead entry instead.
+        if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+        {
+            var target = Services.IconExtractor.ResolveLnkTarget(path);
+            if (!string.IsNullOrEmpty(target)
+                && !File.Exists(target) && !Directory.Exists(target))
+            {
+                OfferRemoveBroken();
+                return;
+            }
+        }
+
         try { Vm.LaunchCommand.Execute(null); }
         catch  { OfferRemoveBroken(); }
     }
@@ -136,6 +151,10 @@ public partial class ShortcutTile : UserControl
         // Restore once drag finishes
         Opacity = 1.0;
         AnimateScale(1.0, 200);
+
+        // OnTile_Drop already clears the hovered tile when a drop lands on a tile;
+        // this covers the cancelled-or-dropped-outside case.
+        ParentWindow?.ClearTileDragOver();
 
         e.Handled = true;
     }

@@ -318,6 +318,15 @@ public partial class MainWindow : Window
 
     private ShortcutTile? _dragOverTile;
 
+    // Called by ShortcutTile once DoDragDrop returns, so a drag that ends without
+    // landing on a tile (drop cancelled or off-toolbar) still releases the
+    // hover-scale on whichever tile was last dragged over.
+    internal void ClearTileDragOver()
+    {
+        _dragOverTile?.EndDragOver();
+        _dragOverTile = null;
+    }
+
     // ── Drag-drop: files / folders onto bar ─────────────────────────────────
 
     private void OnWindow_DragOver(object sender, DragEventArgs e)

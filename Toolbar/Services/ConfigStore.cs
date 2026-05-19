@@ -19,8 +19,21 @@ public class ConfigStore
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private System.Threading.Timer? _debounceTimer;
+    // Single long-lived timer reset via Change() per Save call. The old
+    // dispose+new-per-Save pattern allocated a Timer for every pixel of window
+    // movement (OnLocationChanged → Save), which produced unnecessary GC churn
+    // during drag.
+    private readonly System.Threading.Timer _debounceTimer;
     private AppConfig? _pending;
+
+    public ConfigStore()
+    {
+        _debounceTimer = new System.Threading.Timer(
+            _ => Flush(_pending),
+            null,
+            System.Threading.Timeout.Infinite,
+            System.Threading.Timeout.Infinite);
+    }
 
     public AppConfig Load()
     {
@@ -40,13 +53,12 @@ public class ConfigStore
     public void Save(AppConfig config)
     {
         _pending = config;
-        _debounceTimer?.Dispose();
-        _debounceTimer = new System.Threading.Timer(_ => Flush(_pending), null, 200, System.Threading.Timeout.Infinite);
+        _debounceTimer.Change(200, System.Threading.Timeout.Infinite);
     }
 
     public void SaveImmediate(AppConfig config)
     {
-        _debounceTimer?.Dispose();
+        _debounceTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
         Flush(config);
     }
 

@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Toolbar.Controls;
 using Toolbar.Models;
@@ -69,7 +70,10 @@ public partial class MainWindow : Window
         };
 
         foreach (var shortcut in _vm.Shortcuts)
+        {
             InsertTile(shortcut);
+            QueueIconLoad(shortcut);
+        }
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         Closed += (_, _) => SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
@@ -268,13 +272,6 @@ public partial class MainWindow : Window
 
     private void InsertTile(ShortcutViewModel shortcut, int? atIndex = null)
     {
-        if (shortcut.Icon is null)
-        {
-            shortcut.Icon = shortcut.CustomIconPath is not null
-                ? IconExtractor.FromFile(shortcut.CustomIconPath)
-                : IconExtractor.FromPath(shortcut.Path);
-        }
-
         var tile = new ShortcutTile { DataContext = shortcut };
         tile.Margin = new Thickness(2); // uniform — works for both wrap directions
 
@@ -284,6 +281,24 @@ public partial class MainWindow : Window
 
         int insertAt = atIndex ?? ShortcutsHost.Children.Count;
         ShortcutsHost.Children.Insert(insertAt, tile);
+    }
+
+    // Icon extraction can take 50-200 ms per shortcut (COM + shell I/O, possibly
+    // network for .lnk targets), so doing it inline in InsertTile would block
+    // the constructor for seconds when the user has many shortcuts. Posting at
+    // Background priority lets WPF paint and process input between extractions;
+    // each loaded icon flows back to the bound Image via ShortcutViewModel.Icon.
+    private void QueueIconLoad(ShortcutViewModel shortcut)
+    {
+        if (shortcut.Icon is not null) return;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (shortcut.Icon is not null) return;
+            shortcut.Icon = shortcut.CustomIconPath is not null
+                ? IconExtractor.FromFile(shortcut.CustomIconPath)
+                : IconExtractor.FromPath(shortcut.Path);
+        });
     }
 
     private void AddShortcut(string path)
@@ -308,6 +323,7 @@ public partial class MainWindow : Window
         var shortcut = new ShortcutViewModel { Path = path, DisplayName = name };
         _vm.Shortcuts.Add(shortcut);
         InsertTile(shortcut);
+        QueueIconLoad(shortcut);
         PersistShortcuts();
     }
 

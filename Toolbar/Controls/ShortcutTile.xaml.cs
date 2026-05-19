@@ -23,6 +23,19 @@ public partial class ShortcutTile : UserControl
     private ShortcutViewModel Vm => (ShortcutViewModel)DataContext;
     private MainWindow? ParentWindow => Window.GetWindow(this) as MainWindow;
 
+    // Frozen so they can be reused safely across all tiles without per-animation
+    // allocation. DoubleAnimation itself still has to be new per call (it carries
+    // the target value), but the easing function is the only stateless piece.
+    private static readonly CubicEase EaseInFn  = CreateFrozen(EasingMode.EaseIn);
+    private static readonly CubicEase EaseOutFn = CreateFrozen(EasingMode.EaseOut);
+
+    private static CubicEase CreateFrozen(EasingMode mode)
+    {
+        var ease = new CubicEase { EasingMode = mode };
+        ease.Freeze();
+        return ease;
+    }
+
     private bool _dragOccurred;
     private Point _dragStart;
 
@@ -36,7 +49,7 @@ public partial class ShortcutTile : UserControl
     private void AnimateScale(double to, double ms = 120,
         EasingMode easing = EasingMode.EaseOut)
     {
-        var fn  = new CubicEase { EasingMode = easing };
+        var fn  = easing == EasingMode.EaseIn ? EaseInFn : EaseOutFn;
         var dur = TimeSpan.FromMilliseconds(ms);
         TileScale.BeginAnimation(ScaleTransform.ScaleXProperty,
             new DoubleAnimation(to, dur) { EasingFunction = fn });

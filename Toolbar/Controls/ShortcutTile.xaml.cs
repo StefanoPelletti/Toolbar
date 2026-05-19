@@ -23,6 +23,19 @@ public partial class ShortcutTile : UserControl
     private ShortcutViewModel Vm => (ShortcutViewModel)DataContext;
     private MainWindow? ParentWindow => Window.GetWindow(this) as MainWindow;
 
+    // Frozen so they can be reused safely across all tiles without per-animation
+    // allocation. DoubleAnimation itself still has to be new per call (it carries
+    // the target value), but the easing function is the only stateless piece.
+    private static readonly CubicEase EaseInFn  = CreateFrozen(EasingMode.EaseIn);
+    private static readonly CubicEase EaseOutFn = CreateFrozen(EasingMode.EaseOut);
+
+    private static CubicEase CreateFrozen(EasingMode mode)
+    {
+        var ease = new CubicEase { EasingMode = mode };
+        ease.Freeze();
+        return ease;
+    }
+
     private bool _dragOccurred;
     private Point _dragStart;
 
@@ -36,7 +49,7 @@ public partial class ShortcutTile : UserControl
     private void AnimateScale(double to, double ms = 120,
         EasingMode easing = EasingMode.EaseOut)
     {
-        var fn  = new CubicEase { EasingMode = easing };
+        var fn  = easing == EasingMode.EaseIn ? EaseInFn : EaseOutFn;
         var dur = TimeSpan.FromMilliseconds(ms);
         TileScale.BeginAnimation(ScaleTransform.ScaleXProperty,
             new DoubleAnimation(to, dur) { EasingFunction = fn });
@@ -75,6 +88,21 @@ public partial class ShortcutTile : UserControl
         {
             OfferRemoveBroken();
             return;
+        }
+
+        // A .lnk whose file still exists but whose target was uninstalled would
+        // otherwise hit Process.Start, where the shell shows its own "missing
+        // shortcut" dialog and our try/catch never sees a failure. Check the
+        // resolved target here so we can offer to remove the dead entry instead.
+        if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+        {
+            var target = Services.IconExtractor.ResolveLnkTarget(path);
+            if (!string.IsNullOrEmpty(target)
+                && !File.Exists(target) && !Directory.Exists(target))
+            {
+                OfferRemoveBroken();
+                return;
+            }
         }
 
         try { Vm.LaunchCommand.Execute(null); }
@@ -136,6 +164,10 @@ public partial class ShortcutTile : UserControl
         // Restore once drag finishes
         Opacity = 1.0;
         AnimateScale(1.0, 200);
+
+        // OnTile_Drop already clears the hovered tile when a drop lands on a tile;
+        // this covers the cancelled-or-dropped-outside case.
+        ParentWindow?.ClearTileDragOver();
 
         e.Handled = true;
     }

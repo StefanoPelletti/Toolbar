@@ -9,6 +9,7 @@ public class MainViewModel : ObservableBase
     private bool _launchAtBoot;
     private bool _isVertical;
     private int  _crossAxisCount = 1;
+    private int  _scaleSteps;
 
     public ObservableCollection<ShortcutViewModel> Shortcuts { get; } = [];
 
@@ -17,12 +18,28 @@ public class MainViewModel : ObservableBase
     public bool IsVertical     { get => _isVertical;     set => Set(ref _isVertical,     value); }
     public int  CrossAxisCount { get => _crossAxisCount; set => Set(ref _crossAxisCount, Math.Max(1, value)); }
 
+    public int  ScaleSteps
+    {
+        get => _scaleSteps;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, 5);
+            if (_scaleSteps == clamped) return;
+            _scaleSteps = clamped;
+            Notify(nameof(ScaleSteps));
+            Notify(nameof(Scale));
+        }
+    }
+
+    public double Scale => 1.0 + _scaleSteps * 0.1;
+
     public void LoadFrom(AppConfig config)
     {
         AlwaysOnTop    = config.Settings.AlwaysOnTop;
         LaunchAtBoot   = config.Settings.LaunchAtBoot;
         IsVertical     = config.Settings.IsVertical;
         CrossAxisCount = config.Settings.CrossAxisCount;
+        ScaleSteps     = config.Settings.ScaleSteps;
 
         Shortcuts.Clear();
         foreach (var entry in config.Shortcuts)
@@ -35,6 +52,7 @@ public class MainViewModel : ObservableBase
         config.Settings.LaunchAtBoot   = LaunchAtBoot;
         config.Settings.IsVertical     = IsVertical;
         config.Settings.CrossAxisCount = CrossAxisCount;
+        config.Settings.ScaleSteps     = ScaleSteps;
         config.Shortcuts = Shortcuts.Select(s => s.ToEntry()).ToList();
     }
 }

@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Toolbar.Controls;
 using Toolbar.Models;
@@ -69,7 +70,10 @@ public partial class MainWindow : Window
         };
 
         foreach (var shortcut in _vm.Shortcuts)
+        {
             InsertTile(shortcut);
+            QueueIconLoad(shortcut);
+        }
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         Closed += (_, _) => SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
@@ -79,6 +83,16 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ApplyScale();
+    }
+
+    // OuterPanel uses LayoutTransform so its content participates in layout at the
+    // scaled size — measured logical pixels stay the same, only the rendered (and
+    // reported-to-parent) size grows. ApplyOrientation then bakes the same factor
+    // into the fixed cross-axis dimension so the window doesn't clip its tiles.
+    private void ApplyScale()
+    {
+        OuterPanel.LayoutTransform = new System.Windows.Media.ScaleTransform(_vm.Scale, _vm.Scale);
         ApplyOrientation(_vm.IsVertical);
     }
 
@@ -88,6 +102,20 @@ public partial class MainWindow : Window
             && DisplayLayout.IsVisibleOn(stored.Left, stored.Top, ActualWidth, ActualHeight))
         {
             return stored;
+        }
+
+        // No exact match for this layout — reuse any previously-saved position that
+        // still lands on a connected monitor, so disconnecting/rearranging displays
+        // doesn't dump the window back onto the primary at (100, 100).
+        foreach (var candidate in _config.WindowPositions.Values)
+        {
+            if (DisplayLayout.IsVisibleOn(candidate.Left, candidate.Top, ActualWidth, ActualHeight))
+            {
+                var reused = new WindowPosition { Left = candidate.Left, Top = candidate.Top };
+                _config.WindowPositions[signature] = reused;
+                _store.Save(_config);
+                return reused;
+            }
         }
 
         var (dl, dt) = DisplayLayout.DefaultPosition();
@@ -128,10 +156,14 @@ public partial class MainWindow : Window
 
         SizeToContent = SizeToContent.Manual;
 
+        // OuterPanel's host margins (8 px on the cross axis) scale with the
+        // LayoutTransform; the outer Border (1 px each side) does not.
+        double scaled = (n * TileStep + 8) * _vm.Scale + 2;
+
         if (vertical)
         {
             // Fixed width derived from column count; height auto-sizes
-            Width  = n * TileStep + 10;   // 10 = host margins (4+4) + border (1+1)
+            Width  = scaled;
             Height = double.NaN;
             SizeToContent = SizeToContent.Height;
 
@@ -158,7 +190,7 @@ public partial class MainWindow : Window
         else
         {
             // Fixed height derived from row count; width auto-sizes
-            Height = n * TileStep + 10;
+            Height = scaled;
             Width  = double.NaN;
             SizeToContent = SizeToContent.Width;
 
@@ -213,8 +245,11 @@ public partial class MainWindow : Window
             : pos.Y - _resizeStart.Y;  // vertical drag   → rows
 
         int maxCount = Math.Max(1, _vm.Shortcuts.Count);
+        // The grip lives outside OuterPanel's LayoutTransform, so its mouse delta
+        // is in window pixels — divide by the scaled tile width to get columns.
+        double step = TileStep * _vm.Scale;
         int newCount = Math.Clamp(
-            _resizeStartCount + (int)Math.Round(delta / TileStep),
+            _resizeStartCount + (int)Math.Round(delta / step),
             1, maxCount);
 
         if (newCount == _vm.CrossAxisCount) return;
@@ -237,13 +272,6 @@ public partial class MainWindow : Window
 
     private void InsertTile(ShortcutViewModel shortcut, int? atIndex = null)
     {
-        if (shortcut.Icon is null)
-        {
-            shortcut.Icon = shortcut.CustomIconPath is not null
-                ? IconExtractor.FromFile(shortcut.CustomIconPath)
-                : IconExtractor.FromPath(shortcut.Path);
-        }
-
         var tile = new ShortcutTile { DataContext = shortcut };
         tile.Margin = new Thickness(2); // uniform — works for both wrap directions
 
@@ -253,6 +281,24 @@ public partial class MainWindow : Window
 
         int insertAt = atIndex ?? ShortcutsHost.Children.Count;
         ShortcutsHost.Children.Insert(insertAt, tile);
+    }
+
+    // Icon extraction can take 50-200 ms per shortcut (COM + shell I/O, possibly
+    // network for .lnk targets), so doing it inline in InsertTile would block
+    // the constructor for seconds when the user has many shortcuts. Posting at
+    // Background priority lets WPF paint and process input between extractions;
+    // each loaded icon flows back to the bound Image via ShortcutViewModel.Icon.
+    private void QueueIconLoad(ShortcutViewModel shortcut)
+    {
+        if (shortcut.Icon is not null) return;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (shortcut.Icon is not null) return;
+            shortcut.Icon = shortcut.CustomIconPath is not null
+                ? IconExtractor.FromFile(shortcut.CustomIconPath)
+                : IconExtractor.FromPath(shortcut.Path);
+        });
     }
 
     private void AddShortcut(string path)
@@ -277,6 +323,7 @@ public partial class MainWindow : Window
         var shortcut = new ShortcutViewModel { Path = path, DisplayName = name };
         _vm.Shortcuts.Add(shortcut);
         InsertTile(shortcut);
+        QueueIconLoad(shortcut);
         PersistShortcuts();
     }
 
@@ -303,6 +350,15 @@ public partial class MainWindow : Window
         ShortcutsHost.Children.OfType<ShortcutTile>().ToList();
 
     private ShortcutTile? _dragOverTile;
+
+    // Called by ShortcutTile once DoDragDrop returns, so a drag that ends without
+    // landing on a tile (drop cancelled or off-toolbar) still releases the
+    // hover-scale on whichever tile was last dragged over.
+    internal void ClearTileDragOver()
+    {
+        _dragOverTile?.EndDragOver();
+        _dragOverTile = null;
+    }
 
     // ── Drag-drop: files / folders onto bar ─────────────────────────────────
 
@@ -417,7 +473,7 @@ public partial class MainWindow : Window
         var dlg = new SettingsWindow(_vm) { Owner = this };
         if (dlg.ShowDialog() == true)
         {
-            ApplyOrientation(_vm.IsVertical);
+            ApplyScale();
             PersistShortcuts();
         }
     }

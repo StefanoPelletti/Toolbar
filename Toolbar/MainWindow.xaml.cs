@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,6 +30,10 @@ public partial class MainWindow : Window
     private readonly MainViewModel _vm = new();
     private readonly HotKeyService _hotkey = new();
 
+    // Backing list for the quick-launch palette. Holds the same VM instances as
+    // the bar, so icons already lazily loaded for tiles show up here for free.
+    private readonly ObservableCollection<ShortcutViewModel> _searchResults = [];
+
     // Each tile occupies this many pixels in the cross-axis direction
     // (tile 48 + 2px margin each side = 52)
     private const int TileStep = 52;
@@ -41,6 +46,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _vm;
+        SearchList.ItemsSource = _searchResults;
 
         _config = _store.Load();
         _vm.LoadFrom(_config);
@@ -117,14 +123,77 @@ public partial class MainWindow : Window
     {
         if (IsVisible && IsActive)
         {
+            SearchPopup.IsOpen = false;
             Hide();
         }
         else
         {
             Show();
             Activate();
+            OpenSearch();
         }
     }
+
+    // ── Quick-launch palette ──────────────────────────────────────────────────
+
+    private void OnSearch_Click(object sender, RoutedEventArgs e) => OpenSearch();
+
+    private void OpenSearch()
+    {
+        if (_vm.Shortcuts.Count == 0) return;
+        SearchBox.Text = string.Empty;
+        PopulateSearch(string.Empty);
+        SearchPopup.PlacementTarget = RootBorder;
+        SearchPopup.IsOpen = true;
+        // Focus once the popup is up; doing it inline can miss before the popup's
+        // own visual tree is connected.
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => SearchBox.Focus());
+    }
+
+    private void PopulateSearch(string query)
+    {
+        _searchResults.Clear();
+        IEnumerable<ShortcutViewModel> matches = string.IsNullOrWhiteSpace(query)
+            ? _vm.Shortcuts
+            : _vm.Shortcuts.Where(s =>
+                s.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var m in matches) _searchResults.Add(m);
+        if (_searchResults.Count > 0) SearchList.SelectedIndex = 0;
+    }
+
+    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+        => PopulateSearch(SearchBox.Text);
+
+    private void OnSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Down:   MoveSelection(+1); e.Handled = true; break;
+            case Key.Up:     MoveSelection(-1); e.Handled = true; break;
+            case Key.Enter:  LaunchSelected();  e.Handled = true; break;
+            case Key.Escape: SearchPopup.IsOpen = false; e.Handled = true; break;
+        }
+    }
+
+    private void MoveSelection(int delta)
+    {
+        if (_searchResults.Count == 0) return;
+        int idx = Math.Clamp(SearchList.SelectedIndex + delta, 0, _searchResults.Count - 1);
+        SearchList.SelectedIndex = idx;
+        SearchList.ScrollIntoView(SearchList.SelectedItem);
+    }
+
+    private void OnSearchListDoubleClick(object sender, MouseButtonEventArgs e) => LaunchSelected();
+
+    private void LaunchSelected()
+    {
+        if (SearchList.SelectedItem is not ShortcutViewModel vm) return;
+        SearchPopup.IsOpen = false;
+        vm.LaunchCommand.Execute(null);
+    }
+
+    private void OnSearchClosed(object? sender, EventArgs e) => _searchResults.Clear();
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {

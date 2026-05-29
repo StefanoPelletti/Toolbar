@@ -193,7 +193,217 @@ public partial class MainWindow : Window
         vm.LaunchCommand.Execute(null);
     }
 
-    private void OnSearchClosed(object? sender, EventArgs e) => _searchResults.Clear();
+    private void OnSearchClosed(object? sender, EventArgs e)
+    {
+        _searchResults.Clear();
+        // Closing the palette can leave the bar idle — let it tuck away again.
+        if (_autoHide && !IsMouseOver && !IsActive) ScheduleConceal();
+    }
+
+    // ── Auto-hide / edge docking ──────────────────────────────────────────────
+
+    private enum Edge { Left, Right, Top, Bottom }
+
+    private const double RevealStrip = 4.0; // px left peeking when concealed
+
+    private bool  _autoHide;   // setting is on
+    private bool  _revealed;   // currently fully on-screen (vs tucked away)
+    private bool  _sliding;    // a programmatic move is in flight — suppress persist
+    private Edge  _edge;
+    private Point _anchor;     // the docked, fully-visible position
+    private DispatcherTimer? _slideTimer;
+    private DispatcherTimer? _concealTimer;
+
+    // Single entry point for every auto-hide state change: turning the feature on
+    // or off, and re-docking after a scale/orientation change. When the feature is
+    // off it falls through to the ordinary visible-area clamp, so it can stand in
+    // for ClampToVisibleArea as the post-layout step.
+    internal void RefreshAutoHide()
+    {
+        bool want = _vm.AutoHide;
+
+        if (want && !_autoHide)            // turning on
+        {
+            _autoHide = true;
+            _anchor = new Point(Left, Top);
+            ComputeEdgeAndSnapAnchor();
+            _revealed = true;
+            SetWindowPosition(_anchor);            // snap flush to the edge
+            PersistPosition(_anchor.X, _anchor.Y); // remember the docked spot
+            ScheduleConceal();                     // tuck away after a beat
+        }
+        else if (!want && _autoHide)       // turning off
+        {
+            _autoHide = false;
+            CancelConceal();
+            StopSlide();
+            _revealed = true;
+            SetWindowPosition(_anchor);
+            PersistPosition(_anchor.X, _anchor.Y);
+        }
+        else if (want && _autoHide)        // already on; geometry changed
+        {
+            ComputeEdgeAndSnapAnchor();
+            SetWindowPosition(_revealed ? _anchor : HiddenPosition());
+        }
+        else                               // off, and was off — normal behaviour
+        {
+            ClampToVisibleArea();
+        }
+    }
+
+    // Picks the edge to dock against from the bar's orientation and which side it
+    // sits nearest, then snaps the anchor flush to that edge.
+    private void ComputeEdgeAndSnapAnchor()
+    {
+        var wa = ScreenWorkingAreaAt(_anchor);
+        double w = ActualWidth, h = ActualHeight;
+
+        if (_vm.IsVertical)
+        {
+            double distLeft  = _anchor.X - wa.Left;
+            double distRight = wa.Right - (_anchor.X + w);
+            _edge = distLeft <= distRight ? Edge.Left : Edge.Right;
+            _anchor.X = _edge == Edge.Left ? wa.Left : wa.Right - w;
+            _anchor.Y = Math.Clamp(_anchor.Y, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+        }
+        else
+        {
+            double distTop    = _anchor.Y - wa.Top;
+            double distBottom = wa.Bottom - (_anchor.Y + h);
+            _edge = distTop <= distBottom ? Edge.Top : Edge.Bottom;
+            _anchor.Y = _edge == Edge.Top ? wa.Top : wa.Bottom - h;
+            _anchor.X = Math.Clamp(_anchor.X, wa.Left, Math.Max(wa.Left, wa.Right - w));
+        }
+    }
+
+    // The off-screen resting position: the bar pushed past its edge with only
+    // RevealStrip px still poking into the working area as a hover target.
+    private Point HiddenPosition()
+    {
+        var wa = ScreenWorkingAreaAt(_anchor);
+        double w = ActualWidth, h = ActualHeight;
+        return _edge switch
+        {
+            Edge.Left  => new Point(wa.Left + RevealStrip - w, _anchor.Y),
+            Edge.Right => new Point(wa.Right - RevealStrip,     _anchor.Y),
+            Edge.Top   => new Point(_anchor.X, wa.Top + RevealStrip - h),
+            _          => new Point(_anchor.X, wa.Bottom - RevealStrip),
+        };
+    }
+
+    private static System.Drawing.Rectangle ScreenWorkingAreaAt(Point p) =>
+        System.Windows.Forms.Screen
+            .FromPoint(new System.Drawing.Point((int)p.X, (int)p.Y))
+            .WorkingArea;
+
+    private void Reveal()
+    {
+        if (!_autoHide || _revealed) return;
+        CancelConceal();
+        _revealed = true;
+        SlideTo(_anchor);
+    }
+
+    private void Conceal()
+    {
+        // Never tuck away while the pointer is on the bar or the palette is open —
+        // the user is mid-interaction.
+        if (!_autoHide || !_revealed || SearchPopup.IsOpen || IsMouseOver) return;
+        _revealed = false;
+        SlideTo(HiddenPosition());
+    }
+
+    private void ScheduleConceal()
+    {
+        CancelConceal();
+        // Short grace period so a momentary pointer exit doesn't yank the bar away.
+        _concealTimer = new DispatcherTimer(DispatcherPriority.Normal)
+        {
+            Interval = TimeSpan.FromMilliseconds(450)
+        };
+        _concealTimer.Tick += (_, _) => { CancelConceal(); Conceal(); };
+        _concealTimer.Start();
+    }
+
+    private void CancelConceal()
+    {
+        _concealTimer?.Stop();
+        _concealTimer = null;
+    }
+
+    // Sets position instantly while guarding against persisting the transient move.
+    // The guard is cleared on a later dispatcher pass so a deferred LocationChanged
+    // is still covered.
+    private void SetWindowPosition(Point p)
+    {
+        _sliding = true;
+        Left = p.X;
+        Top  = p.Y;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _sliding = false);
+    }
+
+    // Ease-out slide between the current position and the target, driven by a timer
+    // so we never animate Window.Left/Top directly (whose animation clock would
+    // otherwise fight manual assignment afterwards).
+    private void SlideTo(Point target)
+    {
+        StopSlide();
+        _sliding = true;
+        var start = new Point(Left, Top);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        const double durMs = 140;
+
+        _slideTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(15)
+        };
+        _slideTimer.Tick += (_, _) =>
+        {
+            double t = Math.Clamp(sw.Elapsed.TotalMilliseconds / durMs, 0, 1);
+            double e = 1 - Math.Pow(1 - t, 3); // ease-out cubic
+            Left = start.X + (target.X - start.X) * e;
+            Top  = start.Y + (target.Y - start.Y) * e;
+            if (t >= 1)
+            {
+                StopSlide();
+                Left = target.X;
+                Top  = target.Y;
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _sliding = false);
+            }
+        };
+        _slideTimer.Start();
+    }
+
+    private void StopSlide()
+    {
+        _slideTimer?.Stop();
+        _slideTimer = null;
+    }
+
+    protected override void OnMouseEnter(MouseEventArgs e)
+    {
+        base.OnMouseEnter(e);
+        if (_autoHide) { CancelConceal(); Reveal(); }
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (_autoHide && !IsActive && !SearchPopup.IsOpen) ScheduleConceal();
+    }
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        if (_autoHide) Reveal();
+    }
+
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+        if (_autoHide && !IsMouseOver && !SearchPopup.IsOpen) ScheduleConceal();
+    }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -210,9 +420,11 @@ public partial class MainWindow : Window
         ApplyOrientation(_vm.IsVertical);
 
         // Width/Height assigned above don't reach ActualWidth/Height until WPF's
-        // next layout pass. Queue the clamp at Loaded priority so it runs after
-        // that pass, otherwise we'd be clamping against the pre-scale size.
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ClampToVisibleArea);
+        // next layout pass. Queue the follow-up at Loaded priority so it runs after
+        // that pass, otherwise we'd be measuring against the pre-scale size.
+        // RefreshAutoHide re-docks when auto-hide is on and falls back to the plain
+        // clamp when it's off.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, RefreshAutoHide);
     }
 
     private void ClampToVisibleArea()
@@ -650,13 +862,27 @@ public partial class MainWindow : Window
     protected override void OnLocationChanged(EventArgs e)
     {
         base.OnLocationChanged(e);
+
+        // Auto-hide moves the window programmatically; never persist those transient
+        // or off-screen coordinates as the user's position.
+        if (_sliding) return;
+        if (_autoHide && !_revealed) return;
+        // A move while revealed and not animating is a genuine user drag — track it
+        // as the new docked anchor.
+        if (_autoHide) _anchor = new Point(Left, Top);
+
+        PersistPosition(Left, Top);
+    }
+
+    private void PersistPosition(double left, double top)
+    {
         if (!_config.WindowPositions.TryGetValue(_displaySignature, out var entry))
         {
             entry = new WindowPosition();
             _config.WindowPositions[_displaySignature] = entry;
         }
-        entry.Left = Left;
-        entry.Top  = Top;
+        entry.Left = left;
+        entry.Top  = top;
         entry.LastUsed = DateTime.UtcNow;
         _store.Save(_config);
     }

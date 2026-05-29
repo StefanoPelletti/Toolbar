@@ -12,6 +12,7 @@ public class MainViewModel : ObservableBase
     private int    _scaleSteps;
     private bool   _hotkeyEnabled = true;
     private string _hotkeyGesture = "Ctrl+Alt+Space";
+    private bool   _autoHide;
 
     public ObservableCollection<ShortcutViewModel> Shortcuts { get; } = [];
 
@@ -22,6 +23,7 @@ public class MainViewModel : ObservableBase
 
     public bool   HotkeyEnabled { get => _hotkeyEnabled; set => Set(ref _hotkeyEnabled, value); }
     public string HotkeyGesture { get => _hotkeyGesture; set => Set(ref _hotkeyGesture, value); }
+    public bool   AutoHide      { get => _autoHide;      set => Set(ref _autoHide,      value); }
 
     public int  ScaleSteps
     {
@@ -47,6 +49,7 @@ public class MainViewModel : ObservableBase
         ScaleSteps     = config.Settings.ScaleSteps;
         HotkeyEnabled  = config.Settings.HotkeyEnabled;
         HotkeyGesture  = config.Settings.HotkeyGesture;
+        AutoHide       = config.Settings.AutoHide;
 
         Shortcuts.Clear();
         foreach (var entry in config.Shortcuts)
@@ -62,6 +65,7 @@ public class MainViewModel : ObservableBase
         config.Settings.ScaleSteps     = ScaleSteps;
         config.Settings.HotkeyEnabled  = HotkeyEnabled;
         config.Settings.HotkeyGesture  = HotkeyGesture;
+        config.Settings.AutoHide       = AutoHide;
         config.Shortcuts = Shortcuts.Select(s => s.ToEntry()).ToList();
     }
 }

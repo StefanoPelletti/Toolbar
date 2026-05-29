@@ -14,4 +14,7 @@ public class AppSettings
     // Global show/hide hotkey. Gesture is "Mod+Mod+Key" (e.g. "Ctrl+Alt+Space").
     public bool   HotkeyEnabled { get; set; } = true;
     public string HotkeyGesture { get; set; } = "Ctrl+Alt+Space";
+
+    // Slide the bar off its nearest edge when idle, revealing on hover/activation.
+    public bool AutoHide { get; set; } = false;
 }

@@ -35,6 +35,8 @@ public partial class SettingsWindow : Window
         _hotkeyGesture = vm.HotkeyGesture;
         HotkeyButton.Content = _hotkeyGesture;
 
+        AutoHideBox.IsChecked = vm.AutoHide;
+
         VersionLabel.Text = $"Version {UpdateService.CurrentVersion().ToString(3)}";
     }
 
@@ -224,6 +226,7 @@ public partial class SettingsWindow : Window
         _vm.ScaleSteps = (int)ScaleSlider.Value;
         _vm.HotkeyEnabled = HotkeyBox.IsChecked == true;
         _vm.HotkeyGesture = _hotkeyGesture;
+        _vm.AutoHide = AutoHideBox.IsChecked == true;
         bool bootEnabled = LaunchAtBootBox.IsChecked == true;
         _vm.LaunchAtBoot = bootEnabled;
         AutoStartService.Apply(bootEnabled);

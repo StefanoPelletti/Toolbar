@@ -18,6 +18,7 @@ using DataFormats = System.Windows.DataFormats;
 using DragDropEffects = System.Windows.DragDropEffects;
 using DragEventArgs = System.Windows.DragEventArgs;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Orientation = System.Windows.Controls.Orientation;
 

@@ -17,6 +17,9 @@ public partial class SettingsWindow : Window
     private UpdateUiState _updateState = UpdateUiState.Idle;
     private UpdateInfo? _pendingUpdate;
 
+    private bool _capturingHotkey;
+    private string _hotkeyGesture;
+
     public SettingsWindow(MainViewModel vm)
     {
         InitializeComponent();
@@ -28,8 +31,77 @@ public partial class SettingsWindow : Window
         ScaleSlider.Value = vm.ScaleSteps;
         UpdateScaleLabel(vm.ScaleSteps);
 
+        HotkeyBox.IsChecked = vm.HotkeyEnabled;
+        _hotkeyGesture = vm.HotkeyGesture;
+        HotkeyButton.Content = _hotkeyGesture;
+
         VersionLabel.Text = $"Version {UpdateService.CurrentVersion().ToString(3)}";
     }
+
+    // ── Hotkey rebind capture ─────────────────────────────────────────────────
+
+    private void OnRebindHotkey(object sender, RoutedEventArgs e)
+    {
+        _capturingHotkey = true;
+        HotkeyButton.Content = "Press keys…";
+        HotkeyButton.Focus();
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (_capturingHotkey)
+        {
+            // Esc abandons capture and keeps the previous gesture.
+            if (e.Key == Key.Escape)
+            {
+                EndCapture();
+                e.Handled = true;
+                return;
+            }
+
+            var gesture = BuildGesture(e);
+            if (gesture is not null && HotKeyService.IsValid(gesture))
+            {
+                _hotkeyGesture = gesture;
+                EndCapture();
+            }
+            // Swallow everything while capturing so the focused button doesn't
+            // activate on Space/Enter and Esc doesn't close the dialog.
+            e.Handled = true;
+            return;
+        }
+
+        base.OnPreviewKeyDown(e);
+    }
+
+    private void EndCapture()
+    {
+        _capturingHotkey = false;
+        HotkeyButton.Content = _hotkeyGesture;
+    }
+
+    // Renders the current modifier set + key as "Ctrl+Alt+Space". Returns null
+    // until a non-modifier key is pressed alongside at least one modifier.
+    private static string? BuildGesture(KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (IsModifierKey(key)) return null;
+
+        var parts = new List<string>();
+        var mods = Keyboard.Modifiers;
+        if (mods.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(ModifierKeys.Alt))     parts.Add("Alt");
+        if (mods.HasFlag(ModifierKeys.Shift))   parts.Add("Shift");
+        if (mods.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
+        if (parts.Count == 0) return null;
+
+        parts.Add(key.ToString());
+        return string.Join("+", parts);
+    }
+
+    private static bool IsModifierKey(Key k) => k is Key.LeftCtrl or Key.RightCtrl
+        or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
+        or Key.LWin or Key.RWin or Key.System;
 
     private void OnScaleChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         => UpdateScaleLabel((int)e.NewValue);
@@ -45,14 +117,7 @@ public partial class SettingsWindow : Window
 
     private void OnSave(object sender, RoutedEventArgs e)
     {
-        _vm.AlwaysOnTop = AlwaysOnTopBox.IsChecked == true;
-        _vm.IsVertical = VerticalBox.IsChecked == true;
-        _vm.ScaleSteps = (int)ScaleSlider.Value;
-
-        bool bootEnabled = LaunchAtBootBox.IsChecked == true;
-        _vm.LaunchAtBoot = bootEnabled;
-        AutoStartService.Apply(bootEnabled);
-
+        CommitSettings();
         DialogResult = true;
     }
 
@@ -157,6 +222,8 @@ public partial class SettingsWindow : Window
         _vm.AlwaysOnTop = AlwaysOnTopBox.IsChecked == true;
         _vm.IsVertical = VerticalBox.IsChecked == true;
         _vm.ScaleSteps = (int)ScaleSlider.Value;
+        _vm.HotkeyEnabled = HotkeyBox.IsChecked == true;
+        _vm.HotkeyGesture = _hotkeyGesture;
         bool bootEnabled = LaunchAtBootBox.IsChecked == true;
         _vm.LaunchAtBoot = bootEnabled;
         AutoStartService.Apply(bootEnabled);

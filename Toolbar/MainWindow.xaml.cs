@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using Toolbar.Controls;
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
     private readonly ConfigStore _store = new();
     private readonly AppConfig _config;
     private readonly MainViewModel _vm = new();
+    private readonly HotKeyService _hotkey = new();
 
     // Each tile occupies this many pixels in the cross-axis direction
     // (tile 48 + 2px margin each side = 52)
@@ -79,6 +81,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+            _hotkey.Dispose();
             // Flush any debounced save synchronously. Exiting via the tray's
             // "Exit" item goes straight to Shutdown() without the menu Close
             // path, so without this the last move/reorder in the 200 ms debounce
@@ -87,6 +90,40 @@ public partial class MainWindow : Window
         };
 
         Loaded += OnLoaded;
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        // The HWND only exists from here on, which is what RegisterHotKey needs.
+        _hotkey.Attach((HwndSource)PresentationSource.FromVisual(this)!);
+        _hotkey.Pressed += ToggleVisibility;
+        ApplyHotkey();
+    }
+
+    // Re-registers (or clears) the global hotkey from the current VM settings.
+    // Called at startup and whenever Settings is saved.
+    internal void ApplyHotkey()
+    {
+        if (_vm.HotkeyEnabled)
+            _hotkey.Register(_vm.HotkeyGesture);
+        else
+            _hotkey.Unregister();
+    }
+
+    // Summon-or-dismiss. Pressing the hotkey while the bar is up and focused tucks
+    // it away; otherwise it surfaces and takes focus.
+    private void ToggleVisibility()
+    {
+        if (IsVisible && IsActive)
+        {
+            Hide();
+        }
+        else
+        {
+            Show();
+            Activate();
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -528,6 +565,7 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog() == true)
         {
             ApplyScale();
+            ApplyHotkey();
             PersistShortcuts();
         }
     }

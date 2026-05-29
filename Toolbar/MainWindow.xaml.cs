@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,10 +30,6 @@ public partial class MainWindow : Window
     private readonly MainViewModel _vm = new();
     private readonly HotKeyService _hotkey = new();
 
-    // Backing list for the quick-launch palette. Holds the same VM instances as
-    // the bar, so icons already lazily loaded for tiles show up here for free.
-    private readonly ObservableCollection<ShortcutViewModel> _searchResults = [];
-
     // Each tile occupies this many pixels in the cross-axis direction
     // (tile 48 + 2px margin each side = 52)
     private const int TileStep = 52;
@@ -47,7 +42,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _vm;
-        SearchList.ItemsSource = _searchResults;
 
         _config = _store.Load();
         _vm.LoadFrom(_config);
@@ -124,81 +118,42 @@ public partial class MainWindow : Window
     {
         if (IsVisible && IsActive)
         {
-            SearchPopup.IsOpen = false;
+            _searchWindow?.Close();
             Hide();
         }
         else
         {
             Show();
             Activate();
-            OpenSearch();
+            ShowSearch();
         }
     }
 
     // ── Quick-launch palette ──────────────────────────────────────────────────
 
-    private void OnSearch_Click(object sender, RoutedEventArgs e) => OpenSearch();
+    private SearchWindow? _searchWindow;
 
-    private void OpenSearch()
+    private void OnSearch_Click(object sender, RoutedEventArgs e) => ShowSearch();
+
+    private void ShowSearch()
     {
         if (_vm.Shortcuts.Count == 0) return;
-        SearchBox.Text = string.Empty;
-        PopulateSearch(string.Empty);
-        SearchPopup.PlacementTarget = RootBorder;
-        SearchPopup.IsOpen = true;
-        // Focus once the popup is up; doing it inline can miss before the popup's
-        // own visual tree is connected.
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => SearchBox.Focus());
-    }
+        if (_searchWindow is not null) { _searchWindow.Activate(); return; }
 
-    private void PopulateSearch(string query)
-    {
-        _searchResults.Clear();
-        IEnumerable<ShortcutViewModel> matches = string.IsNullOrWhiteSpace(query)
-            ? _vm.Shortcuts
-            : _vm.Shortcuts.Where(s =>
-                s.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+        // Make sure the bar is on-screen behind the palette when auto-hidden.
+        if (_autoHide && !_revealed) Reveal();
 
-        foreach (var m in matches) _searchResults.Add(m);
-        if (_searchResults.Count > 0) SearchList.SelectedIndex = 0;
-    }
-
-    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
-        => PopulateSearch(SearchBox.Text);
-
-    private void OnSearchKeyDown(object sender, KeyEventArgs e)
-    {
-        switch (e.Key)
+        var win = new SearchWindow(_vm.Shortcuts) { Owner = this };
+        win.PositionNear(this);
+        win.Closed += (_, _) =>
         {
-            case Key.Down:   MoveSelection(+1); e.Handled = true; break;
-            case Key.Up:     MoveSelection(-1); e.Handled = true; break;
-            case Key.Enter:  LaunchSelected();  e.Handled = true; break;
-            case Key.Escape: SearchPopup.IsOpen = false; e.Handled = true; break;
-        }
-    }
-
-    private void MoveSelection(int delta)
-    {
-        if (_searchResults.Count == 0) return;
-        int idx = Math.Clamp(SearchList.SelectedIndex + delta, 0, _searchResults.Count - 1);
-        SearchList.SelectedIndex = idx;
-        SearchList.ScrollIntoView(SearchList.SelectedItem);
-    }
-
-    private void OnSearchListDoubleClick(object sender, MouseButtonEventArgs e) => LaunchSelected();
-
-    private void LaunchSelected()
-    {
-        if (SearchList.SelectedItem is not ShortcutViewModel vm) return;
-        SearchPopup.IsOpen = false;
-        vm.LaunchCommand.Execute(null);
-    }
-
-    private void OnSearchClosed(object? sender, EventArgs e)
-    {
-        _searchResults.Clear();
-        // Closing the palette can leave the bar idle — let it tuck away again.
-        if (_autoHide && !IsMouseOver && !IsActive) ScheduleConceal();
+            _searchWindow = null;
+            // Palette gone — let an auto-hidden bar tuck away again.
+            if (_autoHide && !IsMouseOver && !IsActive) ScheduleConceal();
+        };
+        _searchWindow = win;
+        win.Show();
+        win.Activate();
     }
 
     // ── Auto-hide / edge docking ──────────────────────────────────────────────
@@ -207,7 +162,10 @@ public partial class MainWindow : Window
 
     private const double RevealStrip = 4.0; // px left peeking when concealed
 
+    private const double SnapThreshold = 28.0; // px from an edge that counts as "docked"
+
     private bool  _autoHide;   // setting is on
+    private bool  _docked;     // currently snapped to an edge (only then does it hide)
     private bool  _revealed;   // currently fully on-screen (vs tucked away)
     private bool  _sliding;    // a programmatic move is in flight — suppress persist
     private Edge  _edge;
@@ -226,16 +184,15 @@ public partial class MainWindow : Window
         if (want && !_autoHide)            // turning on
         {
             _autoHide = true;
-            _anchor = new Point(Left, Top);
-            ComputeEdgeAndSnapAnchor();
             _revealed = true;
-            SetWindowPosition(_anchor);            // snap flush to the edge
-            PersistPosition(_anchor.X, _anchor.Y); // remember the docked spot
-            ScheduleConceal();                     // tuck away after a beat
+            // Respect where the bar already sits: dock+hide only if it's at an
+            // edge, otherwise leave it floating and visible.
+            EvaluateDockAfterDrag();
         }
-        else if (!want && _autoHide)       // turning off
+        else if (!want && _autoHide)       // turning off → release and stay put
         {
             _autoHide = false;
+            _docked = false;
             CancelConceal();
             StopSlide();
             _revealed = true;
@@ -244,13 +201,90 @@ public partial class MainWindow : Window
         }
         else if (want && _autoHide)        // already on; geometry changed
         {
-            ComputeEdgeAndSnapAnchor();
-            SetWindowPosition(_revealed ? _anchor : HiddenPosition());
+            if (_docked)
+            {
+                ComputeEdgeAndSnapAnchor();
+                SetWindowPosition(_revealed ? _anchor : HiddenPosition());
+            }
+            else
+            {
+                ClampToVisibleArea();
+            }
         }
         else                               // off, and was off — normal behaviour
         {
             ClampToVisibleArea();
         }
+    }
+
+    // Called after the user finishes dragging the bar (auto-hide on). If they let
+    // go near an eligible edge it docks (and will hide); otherwise it undocks and
+    // stays put, fully visible. This is what makes docking "magnetic" and stops a
+    // floating bar from sliding off to a stale edge.
+    private void EvaluateDockAfterDrag()
+    {
+        if (!_autoHide) return;
+
+        var wa = ScreenWorkingAreaAt(new Point(Left, Top));
+        double w = ActualWidth, h = ActualHeight;
+
+        Edge? near = null;
+        double best = SnapThreshold;
+
+        // Only the two edges that suit the current orientation are eligible.
+        if (_vm.IsVertical)
+        {
+            double dLeft  = Math.Abs(Left - wa.Left);
+            double dRight = Math.Abs(wa.Right - (Left + w));
+            if (dLeft  <= best) { best = dLeft;  near = Edge.Left; }
+            if (dRight <= best) { best = dRight; near = Edge.Right; }
+        }
+        else
+        {
+            double dTop    = Math.Abs(Top - wa.Top);
+            double dBottom = Math.Abs(wa.Bottom - (Top + h));
+            if (dTop    <= best) { best = dTop;    near = Edge.Top; }
+            if (dBottom <= best) { best = dBottom; near = Edge.Bottom; }
+        }
+
+        _anchor = new Point(Left, Top);
+
+        if (near is Edge edge)
+        {
+            _docked = true;
+            _edge = edge;
+            SnapAnchorFlush();
+            _revealed = true;
+            SetWindowPosition(_anchor);
+            PersistPosition(_anchor.X, _anchor.Y);
+            ScheduleConceal();
+        }
+        else
+        {
+            // Floating freely — no hiding.
+            _docked = false;
+            _revealed = true;
+            CancelConceal();
+            PersistPosition(_anchor.X, _anchor.Y);
+        }
+    }
+
+    // Pull the anchor flush to the current _edge on the cross axis, keeping its
+    // position along the edge (clamped into the working area).
+    private void SnapAnchorFlush()
+    {
+        var wa = ScreenWorkingAreaAt(_anchor);
+        double w = ActualWidth, h = ActualHeight;
+
+        switch (_edge)
+        {
+            case Edge.Left:   _anchor.X = wa.Left;          break;
+            case Edge.Right:  _anchor.X = wa.Right  - w;    break;
+            case Edge.Top:    _anchor.Y = wa.Top;           break;
+            case Edge.Bottom: _anchor.Y = wa.Bottom - h;    break;
+        }
+        _anchor.X = Math.Clamp(_anchor.X, wa.Left, Math.Max(wa.Left, wa.Right  - w));
+        _anchor.Y = Math.Clamp(_anchor.Y, wa.Top,  Math.Max(wa.Top,  wa.Bottom - h));
     }
 
     // Picks the edge to dock against from the bar's orientation and which side it
@@ -308,9 +342,9 @@ public partial class MainWindow : Window
 
     private void Conceal()
     {
-        // Never tuck away while the pointer is on the bar or the palette is open —
-        // the user is mid-interaction.
-        if (!_autoHide || !_revealed || SearchPopup.IsOpen || IsMouseOver) return;
+        // Only a docked bar hides, and never while the pointer is on it or the
+        // palette is open — the user is mid-interaction.
+        if (!_autoHide || !_docked || !_revealed || _searchWindow is not null || IsMouseOver) return;
         _revealed = false;
         SlideTo(HiddenPosition());
     }
@@ -391,19 +425,19 @@ public partial class MainWindow : Window
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         base.OnMouseLeave(e);
-        if (_autoHide && !IsActive && !SearchPopup.IsOpen) ScheduleConceal();
+        if (_autoHide && _docked && !IsActive && _searchWindow is null) ScheduleConceal();
     }
 
     protected override void OnActivated(EventArgs e)
     {
         base.OnActivated(e);
-        if (_autoHide) Reveal();
+        if (_autoHide && _docked) Reveal();
     }
 
     protected override void OnDeactivated(EventArgs e)
     {
         base.OnDeactivated(e);
-        if (_autoHide && !IsMouseOver && !SearchPopup.IsOpen) ScheduleConceal();
+        if (_autoHide && _docked && !IsMouseOver && _searchWindow is null) ScheduleConceal();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -802,8 +836,13 @@ public partial class MainWindow : Window
     private void OnDragArea_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.Source is ShortcutTile || e.Source is Button) return;
-        if (e.ButtonState == MouseButtonState.Pressed)
-            DragMove();
+        if (e.ButtonState != MouseButtonState.Pressed) return;
+
+        DragMove(); // blocks until the mouse button is released
+
+        // With auto-hide on, decide whether the drop landed against an edge
+        // (magnetic dock) or out in the open (undock and stay visible).
+        if (_autoHide) EvaluateDockAfterDrag();
     }
 
     // ── Menu button ──────────────────────────────────────────────────────────

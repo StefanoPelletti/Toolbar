@@ -14,6 +14,7 @@ public partial class App : Application
     private const string MutexName = "Toolbar_SingleInstance_7F3A2B1C";
 
     private Mutex? _mutex;
+    private bool _ownsMutex;
     private NotifyIcon? _trayIcon;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -25,9 +26,19 @@ public partial class App : Application
             ex.Handled = true;
         };
 
-        _mutex = new Mutex(initiallyOwned: true, MutexName, out bool isNew);
+        // The in-app updater relaunches us with --updated. At that moment the
+        // outgoing process may still be holding the single-instance mutex for a
+        // few hundred ms, so a zero-timeout acquire would mistake the tail of our
+        // own shutdown for a second instance and exit — leaving nothing running
+        // after an update. Wait briefly in that case; a normal second launch
+        // still bails immediately.
+        bool afterUpdate = e.Args.Contains("--updated", StringComparer.OrdinalIgnoreCase);
 
-        if (!isNew)
+        _mutex = new Mutex(initiallyOwned: false, MutexName);
+        _ownsMutex = TryAcquire(TimeSpan.Zero)
+                     || (afterUpdate && TryAcquire(TimeSpan.FromSeconds(5)));
+
+        if (!_ownsMutex)
         {
             _mutex.Dispose();
             _mutex = null;
@@ -93,10 +104,19 @@ public partial class App : Application
 
     private void ExitApp() => Shutdown(); // OnExit handles cleanup
 
+    // Acquire the single-instance mutex, treating an abandoned mutex (previous
+    // instance crashed without releasing) as a successful acquire.
+    private bool TryAcquire(TimeSpan timeout)
+    {
+        try { return _mutex!.WaitOne(timeout); }
+        catch (AbandonedMutexException) { return true; }
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         _trayIcon?.Dispose();
-        try { _mutex?.ReleaseMutex(); } catch { /* already released or abandoned */ }
+        if (_ownsMutex)
+            try { _mutex?.ReleaseMutex(); } catch { /* already released or abandoned */ }
         _mutex?.Dispose();
         base.OnExit(e);
     }

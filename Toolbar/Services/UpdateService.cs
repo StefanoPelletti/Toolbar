@@ -125,6 +125,10 @@ public static class UpdateService
         {
             FileName = currentExe,
             WorkingDirectory = dir,
+            // Tells the new instance this is an update relaunch, so it waits for the
+            // outgoing process to release the single-instance mutex instead of
+            // exiting immediately on contention.
+            Arguments = "--updated",
             UseShellExecute = true,
         });
     }

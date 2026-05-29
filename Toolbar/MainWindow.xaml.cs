@@ -76,7 +76,15 @@ public partial class MainWindow : Window
         }
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
-        Closed += (_, _) => SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        Closed += (_, _) =>
+        {
+            SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+            // Flush any debounced save synchronously. Exiting via the tray's
+            // "Exit" item goes straight to Shutdown() without the menu Close
+            // path, so without this the last move/reorder in the 200 ms debounce
+            // window would be lost when the threadpool timer never fires.
+            PersistImmediate();
+        };
 
         Loaded += OnLoaded;
     }
@@ -180,26 +188,8 @@ public partial class MainWindow : Window
 
     internal void ApplyOrientation(bool vertical)
     {
-        // Clamp for rendering only — never write back. The user's chosen
-        // CrossAxisCount stays in the VM intact, so deleting shortcuts down to
-        // fewer than that count and re-adding them later restores the original
-        // layout instead of leaving it stuck at the smaller value.
-        int maxCount = Math.Max(1, _vm.Shortcuts.Count);
-        int n = Math.Clamp(_vm.CrossAxisCount, 1, maxCount);
-
-        SizeToContent = SizeToContent.Manual;
-
-        // OuterPanel's host margins (8 px on the cross axis) scale with the
-        // LayoutTransform; the outer Border (1 px each side) does not.
-        double scaled = (n * TileStep + 8) * _vm.Scale + 2;
-
         if (vertical)
         {
-            // Fixed width derived from column count; height auto-sizes
-            Width  = scaled;
-            Height = double.NaN;
-            SizeToContent = SizeToContent.Height;
-
             OuterPanel.Orientation    = Orientation.Vertical;
             ShortcutsHost.Orientation = Orientation.Horizontal; // tiles wrap left→right
             ButtonsHost.Orientation   = Orientation.Vertical;
@@ -222,11 +212,6 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Fixed height derived from row count; width auto-sizes
-            Height = scaled;
-            Width  = double.NaN;
-            SizeToContent = SizeToContent.Width;
-
             OuterPanel.Orientation    = Orientation.Horizontal;
             ShortcutsHost.Orientation = Orientation.Vertical;  // tiles wrap top→bottom
             ButtonsHost.Orientation   = Orientation.Horizontal;
@@ -248,9 +233,44 @@ public partial class MainWindow : Window
             GripDots.Orientation           = Orientation.Horizontal;
         }
 
-        // Uniform tile margin so tiles look right in both wrap directions
-        foreach (var tile in Tiles)
-            tile.Margin = new Thickness(2);
+        // Tiles carry a uniform 2px margin assigned at insertion (InsertTile), and
+        // it's identical in both wrap directions — so there's nothing per-tile to
+        // touch here when orientation flips.
+        ApplyCrossAxisSize();
+    }
+
+    // Sets only the fixed cross-axis dimension (width in vertical mode, height in
+    // horizontal mode) from the current column/row count, letting the main axis
+    // auto-size. Split out from ApplyOrientation so the resize-grip drag — which
+    // never changes orientation — can re-flow the bar on every mouse-move without
+    // rebuilding the panel tree, reassigning host orientations, or walking every
+    // tile.
+    private void ApplyCrossAxisSize()
+    {
+        // Clamp for rendering only — never write back. The user's chosen
+        // CrossAxisCount stays in the VM intact, so deleting shortcuts down to
+        // fewer than that count and re-adding them later restores the original
+        // layout instead of leaving it stuck at the smaller value.
+        int maxCount = Math.Max(1, _vm.Shortcuts.Count);
+        int n = Math.Clamp(_vm.CrossAxisCount, 1, maxCount);
+
+        // OuterPanel's host margins (8 px on the cross axis) scale with the
+        // LayoutTransform; the outer Border (1 px each side) does not.
+        double scaled = (n * TileStep + 8) * _vm.Scale + 2;
+
+        SizeToContent = SizeToContent.Manual;
+        if (_vm.IsVertical)
+        {
+            Width  = scaled;        // fixed width from column count
+            Height = double.NaN;    // height auto-sizes
+            SizeToContent = SizeToContent.Height;
+        }
+        else
+        {
+            Height = scaled;        // fixed height from row count
+            Width  = double.NaN;    // width auto-sizes
+            SizeToContent = SizeToContent.Width;
+        }
     }
 
     // ── Resize grip ──────────────────────────────────────────────────────────
@@ -288,8 +308,9 @@ public partial class MainWindow : Window
         if (newCount == _vm.CrossAxisCount) return;
 
         _vm.CrossAxisCount = newCount;
-        ApplyOrientation(_vm.IsVertical);
-
+        // Orientation is fixed during a drag — only the column/row count changes,
+        // so re-flow the cross-axis size instead of rebuilding the whole layout.
+        ApplyCrossAxisSize();
     }
 
     private void OnGrip_Up(object sender, MouseButtonEventArgs e)

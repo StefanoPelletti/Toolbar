@@ -1,0 +1,87 @@
+<Window x:Class="Toolbar.Controls.ShortcutPropertiesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="340" Height="210"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Background="{StaticResource DialogBackground}"
+            BorderBrush="{StaticResource BarBorder}"
+            BorderThickness="1"
+            CornerRadius="6">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="36"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title bar -->
+            <Border Grid.Row="0"
+                    CornerRadius="6,6,0,0"
+                    MouseLeftButtonDown="OnTitleBar_Drag"
+                    Background="Transparent">
+                <Grid Margin="12,0,4,0">
+                    <TextBlock Text="Shortcut properties"
+                               Foreground="{StaticResource ForegroundPrimary}"
+                               FontSize="12"
+                               VerticalAlignment="Center"/>
+                    <Button HorizontalAlignment="Right"
+                            Width="28" Height="28"
+                            Content="&#xE8BB;"
+                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                            FontSize="11"
+                            Click="OnCancel"
+                            Style="{StaticResource CloseButton}"
+                            VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Content -->
+            <StackPanel Grid.Row="1" Margin="12,8,12,12">
+                <TextBlock Text="Launch arguments"
+                           Foreground="{StaticResource ForegroundPrimary}"
+                           FontSize="12"
+                           Margin="0,0,0,4"/>
+                <TextBox x:Name="ArgsBox"
+                         Background="{StaticResource BarBorder}"
+                         Foreground="{StaticResource ForegroundPrimary}"
+                         CaretBrush="{StaticResource ForegroundPrimary}"
+                         BorderBrush="#555555"
+                         BorderThickness="1"
+                         Padding="8,5"
+                         FontSize="13"
+                         KeyDown="OnKeyDown"/>
+
+                <CheckBox x:Name="AdminBox"
+                          Content="Run as administrator"
+                          Foreground="{StaticResource ForegroundPrimary}"
+                          Margin="0,12,0,0"/>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,16,0,0">
+                    <Button Content="Cancel"
+                            Width="72"
+                            Margin="0,0,8,0"
+                            Padding="0,5"
+                            Click="OnCancel"
+                            Background="{StaticResource BarBorder}"
+                            Foreground="{StaticResource ForegroundPrimary}"
+                            BorderBrush="#555555"
+                            BorderThickness="1"/>
+                    <Button Content="OK"
+                            Width="72"
+                            Padding="0,5"
+                            IsDefault="True"
+                            Click="OnOk"
+                            Background="#0E70C0"
+                            Foreground="White"
+                            BorderThickness="0"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

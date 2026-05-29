@@ -26,9 +26,11 @@
     <UserControl.ContextMenu>
         <ContextMenu>
             <MenuItem Header="Launch" Click="OnContextLaunch"/>
+            <MenuItem Header="Open File Location" Click="OnContextOpenLocation"/>
             <Separator/>
             <MenuItem Header="Rename…" Click="OnContextRename"/>
             <MenuItem Header="Change Icon…" Click="OnContextChangeIcon"/>
+            <MenuItem Header="Properties…" Click="OnContextProperties"/>
             <Separator/>
             <MenuItem Header="Remove" Click="OnContextRemove"/>
         </ContextMenu>

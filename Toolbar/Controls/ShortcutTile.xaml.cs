@@ -202,6 +202,36 @@ public partial class ShortcutTile : UserControl
         ParentWindow?.PersistShortcuts();
     }
 
+    private void OnContextOpenLocation(object sender, RoutedEventArgs e)
+    {
+        var path = Vm.Path;
+        // Shell items (Recycle Bin etc.) have no file-system location to show.
+        if (path.StartsWith("::")) return;
+
+        try
+        {
+            // /select highlights the item in its parent folder; works for files,
+            // folders, and .lnk files alike.
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{path}\"",
+                UseShellExecute = true
+            });
+        }
+        catch { /* best effort */ }
+    }
+
+    private void OnContextProperties(object sender, RoutedEventArgs e)
+    {
+        var dlg = new ShortcutPropertiesDialog(Vm.Arguments, Vm.RunAsAdmin) { Owner = ParentWindow };
+        if (dlg.ShowDialog() != true) return;
+
+        Vm.Arguments = dlg.Arguments;
+        Vm.RunAsAdmin = dlg.RunAsAdmin;
+        ParentWindow?.PersistShortcuts();
+    }
+
     private void OnContextRemove(object sender, RoutedEventArgs e) =>
         ParentWindow?.RemoveShortcut(Vm);
 }

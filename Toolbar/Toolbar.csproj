@@ -8,6 +8,10 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
 
+    <!-- Application icon: sets the EXE icon, and the system tray picks it up
+         via ExtractAssociatedIcon(ProcessPath) in App.xaml.cs. -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+
     <!-- Identity -->
     <Product>Toolbar</Product>
     <Company>Stefano Pelletti</Company>

@@ -701,13 +701,18 @@ public partial class MainWindow : Window
 
         Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
-            if (shortcut.Icon is not null) return;
             // Skip the 50-200 ms shell/COM call if the user removed the
             // shortcut while this Background-priority work was queued.
             if (!_vm.Shortcuts.Contains(shortcut)) return;
-            shortcut.Icon = shortcut.CustomIconPath is not null
-                ? IconExtractor.FromFile(shortcut.CustomIconPath)
-                : IconExtractor.FromPath(shortcut.Path);
+
+            // Flag dead shortcuts so the tile renders a visible, marked "broken"
+            // state instead of an empty (invisible) tile when no icon loads.
+            shortcut.IsBroken = ShortcutViewModel.IsPathBroken(shortcut.Path);
+
+            if (shortcut.Icon is null)
+                shortcut.Icon = shortcut.CustomIconPath is not null
+                    ? IconExtractor.FromFile(shortcut.CustomIconPath)
+                    : IconExtractor.FromPath(shortcut.Path);
         });
     }
 

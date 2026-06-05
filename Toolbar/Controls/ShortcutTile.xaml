@@ -16,11 +16,80 @@
             Background="Transparent"
             CornerRadius="6"
             Margin="2,0">
-        <Image Source="{Binding Icon}"
-               Width="32" Height="32"
-               HorizontalAlignment="Center"
-               VerticalAlignment="Center"
-               RenderOptions.BitmapScalingMode="HighQuality"/>
+        <Grid>
+            <!-- Icon + placeholder; dimmed when the shortcut is broken so it
+                 reads as "still here, but dead" rather than just disappearing. -->
+            <Grid x:Name="IconArea">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Opacity" Value="1"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBroken}" Value="True">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <!-- Real extracted icon -->
+                <Image Source="{Binding Icon}"
+                       Width="32" Height="32"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                <!-- Fallback shown whenever no icon could be loaded, so the tile
+                     is never invisible. -->
+                <Border Width="30" Height="30"
+                        CornerRadius="6"
+                        Background="#22FFFFFF"
+                        BorderBrush="#55FFFFFF"
+                        BorderThickness="1"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Icon}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="?"
+                               Foreground="#AAFFFFFF"
+                               FontSize="18" FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Border>
+            </Grid>
+
+            <!-- Broken marker: a small warning badge that stays at full opacity
+                 so the dead shortcut is easy to spot at a glance. -->
+            <Border Width="14" Height="14"
+                    CornerRadius="7"
+                    Background="#E5C07B"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,1,1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBroken}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="!"
+                           Foreground="#1E1E1E"
+                           FontSize="10" FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
     </Border>
 
     <UserControl.ContextMenu>

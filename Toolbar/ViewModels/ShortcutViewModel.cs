@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Input;
 using System.Windows.Media;
 using Toolbar.Models;
@@ -13,6 +14,7 @@ public class ShortcutViewModel : ObservableBase
     private string? _arguments;
     private bool _runAsAdmin;
     private ImageSource? _icon;
+    private bool _isBroken;
 
     public string DisplayName { get => _displayName; set => Set(ref _displayName, value); }
     public string Path { get => _path; set => Set(ref _path, value); }
@@ -20,6 +22,11 @@ public class ShortcutViewModel : ObservableBase
     public string? Arguments { get => _arguments; set => Set(ref _arguments, value); }
     public bool RunAsAdmin { get => _runAsAdmin; set => Set(ref _runAsAdmin, value); }
     public ImageSource? Icon { get => _icon; set => Set(ref _icon, value); }
+
+    // True when the referenced program/file no longer exists (e.g. it was
+    // uninstalled or deleted). The tile binds to this to render a visible
+    // "broken" state instead of vanishing into an empty, transparent tile.
+    public bool IsBroken { get => _isBroken; set => Set(ref _isBroken, value); }
 
     public ICommand LaunchCommand { get; }
 
@@ -55,6 +62,33 @@ public class ShortcutViewModel : ObservableBase
         Arguments = Arguments,
         RunAsAdmin = RunAsAdmin
     };
+
+    // Shared by the launch path and the icon-load path so both agree on what
+    // counts as "broken". Mirrors the checks the shell itself would fail on.
+    public static bool IsPathBroken(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return true;
+
+        // Virtual shell items (Recycle Bin etc.) have no file-system path and
+        // are always valid.
+        if (path.StartsWith("::")) return false;
+
+        if (!File.Exists(path) && !Directory.Exists(path))
+            return true;
+
+        // A .lnk whose file still exists but whose target was uninstalled is
+        // also broken — Process.Start would only surface the shell's own
+        // "missing shortcut" dialog, so detect the dead target ourselves.
+        if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+        {
+            var target = Services.IconExtractor.ResolveLnkTarget(path);
+            if (!string.IsNullOrEmpty(target)
+                && !File.Exists(target) && !Directory.Exists(target))
+                return true;
+        }
+
+        return false;
+    }
 
     public static ShortcutViewModel FromEntry(ShortcutEntry e) => new()
     {

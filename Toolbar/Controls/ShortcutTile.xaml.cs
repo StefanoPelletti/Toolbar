@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -81,28 +80,14 @@ public partial class ShortcutTile : UserControl
 
     private void TryLaunch()
     {
-        var path = Vm.Path;
-
-        bool isShellItem = path.StartsWith("::");
-        if (!isShellItem && !File.Exists(path) && !Directory.Exists(path))
+        // Catches both a missing file/folder and a .lnk whose target was
+        // uninstalled (which would otherwise only trigger the shell's own
+        // "missing shortcut" dialog rather than an exception we can catch).
+        if (ShortcutViewModel.IsPathBroken(Vm.Path))
         {
+            Vm.IsBroken = true; // refresh the tile's broken state
             OfferRemoveBroken();
             return;
-        }
-
-        // A .lnk whose file still exists but whose target was uninstalled would
-        // otherwise hit Process.Start, where the shell shows its own "missing
-        // shortcut" dialog and our try/catch never sees a failure. Check the
-        // resolved target here so we can offer to remove the dead entry instead.
-        if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
-        {
-            var target = Services.IconExtractor.ResolveLnkTarget(path);
-            if (!string.IsNullOrEmpty(target)
-                && !File.Exists(target) && !Directory.Exists(target))
-            {
-                OfferRemoveBroken();
-                return;
-            }
         }
 
         try { Vm.LaunchCommand.Execute(null); }

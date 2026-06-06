@@ -1,5 +1,9 @@
 using System.Windows;
 using Toolbar.ViewModels;
+using MessageBox = System.Windows.MessageBox;
+using MessageBoxButton = System.Windows.MessageBoxButton;
+using MessageBoxImage = System.Windows.MessageBoxImage;
+using MessageBoxResult = System.Windows.MessageBoxResult;
 
 namespace Toolbar.Services;
 

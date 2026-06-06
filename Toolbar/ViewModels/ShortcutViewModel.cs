@@ -46,8 +46,13 @@ public class ShortcutViewModel : ObservableBase
             };
             if (!string.IsNullOrWhiteSpace(Arguments))
                 psi.Arguments = Arguments;
-            if (RunAsAdmin)
-                psi.Verb = "runas"; // UAC elevation; user cancel throws, caught below
+            // runas only applies to executables and shortcuts; applying it to a
+        // folder or document either throws or silently opens with unexpected
+        // elevation, giving the user no feedback (C3).
+        if (RunAsAdmin &&
+            (Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+             Path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)))
+            psi.Verb = "runas";
 
             Process.Start(psi);
         }
@@ -65,7 +70,9 @@ public class ShortcutViewModel : ObservableBase
 
     // Shared by the launch path and the icon-load path so both agree on what
     // counts as "broken". Mirrors the checks the shell itself would fail on.
-    public static bool IsPathBroken(string path)
+    // Pass a pre-resolved resolvedLnkTarget to avoid a second COM call when
+    // the caller has already resolved the .lnk (P3).
+    public static bool IsPathBroken(string path, string? resolvedLnkTarget = null)
     {
         if (string.IsNullOrEmpty(path)) return true;
 
@@ -81,7 +88,7 @@ public class ShortcutViewModel : ObservableBase
         // "missing shortcut" dialog, so detect the dead target ourselves.
         if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
         {
-            var target = Services.IconExtractor.ResolveLnkTarget(path);
+            var target = resolvedLnkTarget ?? Services.IconExtractor.ResolveLnkTarget(path);
             if (!string.IsNullOrEmpty(target)
                 && !File.Exists(target) && !Directory.Exists(target))
                 return true;

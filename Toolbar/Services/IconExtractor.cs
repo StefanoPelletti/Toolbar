@@ -11,15 +11,15 @@ namespace Toolbar.Services;
 
 public static class IconExtractor
 {
-    public static ImageSource? FromPath(string path)
+    // Optional resolvedLnkTarget lets the caller pass a pre-resolved .lnk target
+    // so the COM IShellLink call is only made once per shortcut (P3).
+    public static ImageSource? FromPath(string path, string? resolvedLnkTarget = null)
     {
         try
         {
-            // Resolve .lnk to its target so we show the target's icon without the shortcut arrow overlay
             var iconPath = path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
-                ? ResolveLnkTarget(path) ?? path
+                ? resolvedLnkTarget ?? ResolveLnkTarget(path) ?? path
                 : path;
-
             return ShellItemImage(iconPath) ?? ShellIcon(iconPath);
         }
         catch
@@ -28,6 +28,9 @@ public static class IconExtractor
         }
     }
 
+    // Callable from any STA thread — uses System.Drawing (not BitmapImage) so
+    // it does not require a WPF Dispatcher (P1). Caps at 64×64 so a
+    // 1024² custom PNG isn't held in memory for a 32 px tile (P5).
     public static ImageSource? FromFile(string iconPath)
     {
         try
@@ -36,18 +39,46 @@ public static class IconExtractor
 
             if (ext == ".ico")
             {
-                using var icon = new System.Drawing.Icon(iconPath, 48, 48);
-                return Imaging.CreateBitmapSourceFromHIcon(
+                using var icon = new System.Drawing.Icon(iconPath, 256, 256);
+                var src = Imaging.CreateBitmapSourceFromHIcon(
                     icon.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                src.Freeze(); // B4: was missing; required for cross-thread use
+                return src;
             }
 
-            var img = new BitmapImage();
-            img.BeginInit();
-            img.UriSource = new Uri(iconPath);
-            img.CacheOption = BitmapCacheOption.OnLoad;
-            img.EndInit();
-            img.Freeze();
-            return img;
+            // Raster images (PNG, BMP, JPEG …): load via System.Drawing so this
+            // method is safe to call from the background STA loader thread.
+            using var bmp = new System.Drawing.Bitmap(iconPath);
+            int outSz = Math.Min(64, Math.Max(bmp.Width, bmp.Height));
+
+            using var canvas = new System.Drawing.Bitmap(
+                outSz, outSz, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (var g = System.Drawing.Graphics.FromImage(canvas))
+            {
+                g.InterpolationMode =
+                    System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.DrawImage(bmp, 0, 0, outSz, outSz);
+            }
+
+            // LockBits + BitmapSource.Create preserves alpha correctly and
+            // can be called from any thread (no Dispatcher required).
+            var data = canvas.LockBits(
+                new System.Drawing.Rectangle(0, 0, canvas.Width, canvas.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
+            {
+                var result = BitmapSource.Create(
+                    data.Width, data.Height, 96, 96,
+                    PixelFormats.Bgra32, null,
+                    data.Scan0, data.Stride * data.Height, data.Stride);
+                result.Freeze();
+                return result;
+            }
+            finally
+            {
+                canvas.UnlockBits(data);
+            }
         }
         catch
         {
@@ -55,14 +86,15 @@ public static class IconExtractor
         }
     }
 
-    // ── IShellItemImageFactory — thumbnails for photos, proper icons for everything else ──
+    // ── IShellItemImageFactory ───────────────────────────────────────────────
 
     private static ImageSource? ShellItemImage(string path)
     {
+        object? obj = null;
         try
         {
             var iid = IID_IShellItemImageFactory;
-            var hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out var obj);
+            var hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out obj);
             if (hr != 0 || obj is null) return null;
 
             var factory = (IShellItemImageFactory)obj;
@@ -86,9 +118,14 @@ public static class IconExtractor
         {
             return null;
         }
+        finally
+        {
+            if (obj is not null)
+                Marshal.ReleaseComObject(obj); // P4: release IShellItemImageFactory RCW
+        }
     }
 
-    // ── SHGetFileInfo fallback (special shell items like "::{CLSID}") ────────
+    // ── SHGetFileInfo fallback ───────────────────────────────────────────────
 
     private static ImageSource? ShellIcon(string path)
     {
@@ -117,20 +154,27 @@ public static class IconExtractor
 
     public static string? ResolveLnkTarget(string lnkPath)
     {
+        object? shell = null;
         try
         {
-            var shell = (IShellLinkW)new ShellLink();
-            var pf = (IPersistFile)shell;
+            shell = new ShellLink();
+            var shellLnk = (IShellLinkW)shell;
+            var pf       = (IPersistFile)shell;
             pf.Load(lnkPath, 0 /* STGM_READ */);
 
             var sb = new StringBuilder(260);
-            shell.GetPath(sb, 260, IntPtr.Zero, 0);
+            shellLnk.GetPath(sb, 260, IntPtr.Zero, 0);
             var target = sb.ToString();
             return string.IsNullOrEmpty(target) ? null : target;
         }
         catch
         {
             return null;
+        }
+        finally
+        {
+            if (shell is not null)
+                Marshal.ReleaseComObject(shell); // P4: release IShellLink + IPersistFile RCW
         }
     }
 
@@ -153,12 +197,12 @@ public static class IconExtractor
     [Flags]
     private enum SIIGBF : int
     {
-        ResizeToFit = 0x00,
-        BiggerSizeOk = 0x01,
-        MemoryOnly = 0x02,
-        IconOnly = 0x04,
-        ThumbnailOnly = 0x08,
-        InCacheOnly = 0x10,
+        ResizeToFit    = 0x00,
+        BiggerSizeOk   = 0x01,
+        MemoryOnly     = 0x02,
+        IconOnly       = 0x04,
+        ThumbnailOnly  = 0x08,
+        InCacheOnly    = 0x10,
     }
 
     [ComImport]
@@ -211,7 +255,7 @@ public static class IconExtractor
         public string szTypeName;
     }
 
-    private const uint SHGFI_ICON = 0x100;
+    private const uint SHGFI_ICON      = 0x100;
     private const uint SHGFI_LARGEICON = 0x0;
 
     [DllImport("shell32.dll", CharSet = CharSet.Auto)]

@@ -16,6 +16,7 @@ public partial class App : Application
     private Mutex? _mutex;
     private bool _ownsMutex;
     private NotifyIcon? _trayIcon;
+    private System.Drawing.Icon? _trayIconHandle; // owned; NotifyIcon does not dispose it (B3)
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -62,9 +63,9 @@ public partial class App : Application
         System.Drawing.Icon icon;
         try
         {
-            icon = System.Drawing.Icon.ExtractAssociatedIcon(
-                Environment.ProcessPath ?? AppContext.BaseDirectory)
-                ?? System.Drawing.SystemIcons.Application;
+            _trayIconHandle = System.Drawing.Icon.ExtractAssociatedIcon(
+                Environment.ProcessPath ?? AppContext.BaseDirectory);
+            icon = _trayIconHandle ?? System.Drawing.SystemIcons.Application;
         }
         catch
         {
@@ -115,6 +116,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayIcon?.Dispose();
+        _trayIconHandle?.Dispose(); // B3: dispose the owned icon handle separately
         if (_ownsMutex)
             try { _mutex?.ReleaseMutex(); } catch { /* already released or abandoned */ }
         _mutex?.Dispose();

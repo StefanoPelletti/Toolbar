@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -29,6 +30,7 @@ public partial class MainWindow : Window
     private readonly AppConfig _config;
     private readonly MainViewModel _vm = new();
     private readonly HotKeyService _hotkey = new();
+    private readonly IconLoaderService _iconLoader = new();
 
     // Each tile occupies this many pixels in the cross-axis direction
     // (tile 48 + 2px margin each side = 52)
@@ -83,6 +85,7 @@ public partial class MainWindow : Window
         {
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             _hotkey.Dispose();
+            _iconLoader.Dispose();
             // Flush any debounced save synchronously. Exiting via the tray's
             // "Exit" item goes straight to Shutdown() without the menu Close
             // path, so without this the last move/reorder in the 200 ms debounce
@@ -428,10 +431,31 @@ public partial class MainWindow : Window
         if (_autoHide && _docked && !IsActive && _searchWindow is null) ScheduleConceal();
     }
 
+    private DateTime _lastBrokenCheck = DateTime.MinValue;
+
     protected override void OnActivated(EventArgs e)
     {
         base.OnActivated(e);
         if (_autoHide && _docked) Reveal();
+
+        // Periodically re-evaluate broken state so a reinstalled program's tile
+        // recovers, and a newly-deleted one shows the broken badge, without
+        // requiring a restart (C1). The check runs on the STA loader thread so
+        // .lnk resolution doesn't stall the UI.
+        if ((DateTime.UtcNow - _lastBrokenCheck).TotalSeconds >= 30)
+        {
+            _lastBrokenCheck = DateTime.UtcNow;
+            var snapshot = _vm.Shortcuts.ToList();
+            _iconLoader.Queue(() =>
+            {
+                foreach (var sc in snapshot)
+                {
+                    bool broken = ShortcutViewModel.IsPathBroken(sc.Path);
+                    if (sc.IsBroken != broken)
+                        Dispatcher.BeginInvoke(() => sc.IsBroken = broken);
+                }
+            });
+        }
     }
 
     protected override void OnDeactivated(EventArgs e)
@@ -690,35 +714,66 @@ public partial class MainWindow : Window
         ShortcutsHost.Children.Insert(insertAt, tile);
     }
 
-    // Icon extraction can take 50-200 ms per shortcut (COM + shell I/O, possibly
-    // network for .lnk targets), so doing it inline in InsertTile would block
-    // the constructor for seconds when the user has many shortcuts. Posting at
-    // Background priority lets WPF paint and process input between extractions;
-    // each loaded icon flows back to the bound Image via ShortcutViewModel.Icon.
+    // Icon extraction can take 50-200 ms per shortcut (COM + shell I/O). The
+    // fast path serves from a two-level cache (memory → disk) without touching
+    // the COM layer at all. Cache misses are dispatched to the dedicated STA
+    // loader thread so shell calls never block the UI (P1/P2).
     private void QueueIconLoad(ShortcutViewModel shortcut)
     {
         if (shortcut.Icon is not null) return;
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        // Fast path: serve from memory or disk cache (UI thread, no COM) (P2).
+        var cacheKey = IconCache.CacheKey(shortcut.CustomIconPath ?? shortcut.Path);
+        var cached   = IconCache.TryGet(cacheKey);
+        if (cached != null)
         {
-            // Skip the 50-200 ms shell/COM call if the user removed the
-            // shortcut while this Background-priority work was queued.
-            if (!_vm.Shortcuts.Contains(shortcut)) return;
-
-            // Flag dead shortcuts so the tile renders a visible, marked "broken"
-            // state instead of an empty (invisible) tile when no icon loads.
+            shortcut.Icon    = cached;
             shortcut.IsBroken = ShortcutViewModel.IsPathBroken(shortcut.Path);
+            return;
+        }
 
-            if (shortcut.Icon is null)
-                shortcut.Icon = shortcut.CustomIconPath is not null
-                    ? IconExtractor.FromFile(shortcut.CustomIconPath)
-                    : IconExtractor.FromPath(shortcut.Path);
+        // Slow path: extract on the dedicated STA thread (P1). Resolve the .lnk
+        // target once and share the result with both the broken check and icon
+        // extraction so the COM IShellLink call only happens once per shortcut (P3).
+        _iconLoader.Queue(() =>
+        {
+            string? lnkTarget = shortcut.Path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
+                ? IconExtractor.ResolveLnkTarget(shortcut.Path)
+                : null;
+
+            bool broken = ShortcutViewModel.IsPathBroken(shortcut.Path, lnkTarget);
+
+            ImageSource? icon = shortcut.CustomIconPath is not null
+                ? IconExtractor.FromFile(shortcut.CustomIconPath)
+                : IconExtractor.FromPath(shortcut.Path, lnkTarget);
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                shortcut.IsBroken = broken;
+                if (shortcut.Icon is null)
+                {
+                    shortcut.Icon = icon;
+                    IconCache.Store(cacheKey, icon); // persist for next launch (P2)
+                }
+            });
         });
+    }
+
+    // Canonicalise a file-system path: resolve to absolute, strip trailing
+    // separators. Shell items ("::{…}") are left unchanged.
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrEmpty(path) || path.StartsWith("::")) return path;
+        try { path = Path.GetFullPath(path).TrimEnd('\\', '/'); }
+        catch { }
+        return path;
     }
 
     private void AddShortcut(string path)
     {
-        if (_vm.Shortcuts.Any(s => s.Path.Equals(path, StringComparison.OrdinalIgnoreCase)))
+        path = NormalizePath(path);
+        if (_vm.Shortcuts.Any(s =>
+                NormalizePath(s.Path).Equals(path, StringComparison.OrdinalIgnoreCase)))
             return;
 
         string name;

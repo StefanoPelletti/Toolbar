@@ -4,12 +4,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Microsoft.Win32;
+using Toolbar.Services;
 using Toolbar.ViewModels;
 using DragDropEffects = System.Windows.DragDropEffects;
-using MessageBox = System.Windows.MessageBox;
-using MessageBoxButton = System.Windows.MessageBoxButton;
-using MessageBoxImage = System.Windows.MessageBoxImage;
-using MessageBoxResult = System.Windows.MessageBoxResult;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Point = System.Windows.Point;
@@ -78,33 +75,7 @@ public partial class ShortcutTile : UserControl
 
     // ── Launch with broken-shortcut detection ────────────────────────────────
 
-    private void TryLaunch()
-    {
-        // Catches both a missing file/folder and a .lnk whose target was
-        // uninstalled (which would otherwise only trigger the shell's own
-        // "missing shortcut" dialog rather than an exception we can catch).
-        if (ShortcutViewModel.IsPathBroken(Vm.Path))
-        {
-            Vm.IsBroken = true; // refresh the tile's broken state
-            OfferRemoveBroken();
-            return;
-        }
-
-        try { Vm.LaunchCommand.Execute(null); }
-        catch  { OfferRemoveBroken(); }
-    }
-
-    private void OfferRemoveBroken()
-    {
-        var result = MessageBox.Show(
-            $"\"{Vm.DisplayName}\" could not be found or opened.\n\nRemove this shortcut?",
-            "Shortcut unavailable",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-
-        if (result == MessageBoxResult.Yes)
-            ParentWindow?.RemoveShortcut(Vm);
-    }
+    private void TryLaunch() => ShortcutLauncher.TryLaunch(Vm, ParentWindow);
 
     // ── Left-click: press animation + launch ────────────────────────────────
 
@@ -182,8 +153,10 @@ public partial class ShortcutTile : UserControl
 
         if (dlg.ShowDialog() != true) return;
 
+        var icon = IconExtractor.FromFile(dlg.FileName);
         Vm.CustomIconPath = dlg.FileName;
-        Vm.Icon = Services.IconExtractor.FromFile(dlg.FileName);
+        Vm.Icon = icon;
+        IconCache.Store(IconCache.CacheKey(dlg.FileName), icon); // persist for instant load next launch
         ParentWindow?.PersistShortcuts();
     }
 

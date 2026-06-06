@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Toolbar.Services;
 using Toolbar.ViewModels;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
@@ -93,7 +94,10 @@ public partial class SearchWindow : Window
     private void LaunchSelected()
     {
         if (SearchList.SelectedItem is not ShortcutViewModel vm) return;
-        vm.LaunchCommand.Execute(null);
+        // Close the palette first so the broken-shortcut dialog (if any) is
+        // parented by MainWindow rather than the now-dismissed palette.
+        var owner = Owner;
         Close();
+        ShortcutLauncher.TryLaunch(vm, owner);
     }
 }

@@ -15,7 +15,8 @@
         UseLayoutRounding="True"
         AllowDrop="True"
         Drop="OnWindow_Drop"
-        DragOver="OnWindow_DragOver">
+        DragOver="OnWindow_DragOver"
+        DragLeave="OnWindow_DragLeave">
 
     <Border x:Name="RootBorder"
             Background="{StaticResource BarBackground}"

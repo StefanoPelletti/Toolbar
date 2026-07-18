@@ -9,7 +9,11 @@ namespace Toolbar.Services;
 // back when ready.
 internal sealed class IconLoaderService : IDisposable
 {
-    private readonly BlockingCollection<Action> _queue = new(boundedCapacity: 64);
+    // Unbounded: Queue() is called from the UI thread (one item per shortcut at
+    // startup), and a bounded collection's Add would block the UI thread the
+    // moment more shortcuts exist than the bound. Depth is naturally limited by
+    // the number of shortcuts on the bar.
+    private readonly BlockingCollection<Action> _queue = new();
     private readonly Thread _thread;
     private bool _disposed;
 

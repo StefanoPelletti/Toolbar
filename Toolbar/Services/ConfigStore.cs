@@ -104,7 +104,14 @@ public class ConfigStore
                 // typically the timer's threadpool thread — so a slow disk
                 // never freezes the UI.
                 Directory.CreateDirectory(ConfigDir);
-                File.WriteAllText(ConfigPath, json);
+
+                // Write-then-rename so a crash or power loss mid-write can never
+                // leave a truncated config.json behind — Load treats a corrupt
+                // file as "start fresh", which would silently wipe the user's
+                // whole layout. The rename replace is atomic on NTFS.
+                var tmp = ConfigPath + ".tmp";
+                File.WriteAllText(tmp, json);
+                File.Move(tmp, ConfigPath, overwrite: true);
                 _lastFlushed = config;
             }
             catch { /* swallow — non-critical */ }

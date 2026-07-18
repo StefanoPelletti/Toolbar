@@ -845,6 +845,18 @@ public partial class MainWindow : Window
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
+
+        // OLE drags never raise MouseEnter, so an auto-hidden bar would stay
+        // tucked away while the user hovers a file over its reveal strip —
+        // slide out so the drop can land on a full-size bar.
+        if (_autoHide) { CancelConceal(); Reveal(); }
+    }
+
+    // Counterpart to the reveal above: the drag left without dropping and no
+    // MouseLeave will ever fire, so re-arm the conceal timer here.
+    private void OnWindow_DragLeave(object sender, DragEventArgs e)
+    {
+        if (_autoHide && _docked && !IsMouseOver && !IsActive) ScheduleConceal();
     }
 
     private void OnWindow_Drop(object sender, DragEventArgs e)

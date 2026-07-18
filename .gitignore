@@ -1,5 +1,6 @@
-# Claude Code local settings
-.claude/
+# Claude Code local state (keep shared skills tracked)
+.claude/*
+!.claude/skills/
 
 # Build output
 bin/
@@ -11,8 +12,12 @@ obj/
 .idea/
 *.suo
 
-# .NET publish
+# .NET publish (including versioned release snapshots)
 publish/
+publish-v*/
+
+# Session debug artifacts
+screenshot*.png
 
 # User-specific config (contains local paths / tray icon cache)
 # The app's runtime config lives in %AppData%\Toolbar — not in the repo

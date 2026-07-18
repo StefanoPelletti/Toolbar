@@ -46,13 +46,24 @@ public class ShortcutViewModel : ObservableBase
             };
             if (!string.IsNullOrWhiteSpace(Arguments))
                 psi.Arguments = Arguments;
+
+            // Launch with the target's own folder as the working directory —
+            // apps that resolve data files relative to their CWD misbehave when
+            // they inherit Toolbar's. Skipped for .lnk (the shortcut's own
+            // "Start in" field must win) and for folders / shell items ("::…").
+            if (!Path.StartsWith("::") &&
+                !Path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(Path) &&
+                System.IO.Path.GetDirectoryName(Path) is { Length: > 0 } dir)
+                psi.WorkingDirectory = dir;
+
             // runas only applies to executables and shortcuts; applying it to a
-        // folder or document either throws or silently opens with unexpected
-        // elevation, giving the user no feedback (C3).
-        if (RunAsAdmin &&
-            (Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-             Path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)))
-            psi.Verb = "runas";
+            // folder or document either throws or silently opens with unexpected
+            // elevation, giving the user no feedback (C3).
+            if (RunAsAdmin &&
+                (Path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                 Path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)))
+                psi.Verb = "runas";
 
             Process.Start(psi);
         }

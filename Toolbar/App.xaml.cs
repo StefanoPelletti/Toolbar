@@ -89,6 +89,11 @@ public partial class App : Application
         _trayIcon.DoubleClick += (_, _) => ShowMainWindow();
     }
 
+    // Non-blocking toast off the tray icon, for warnings that shouldn't
+    // interrupt startup (e.g. the global hotkey being taken by another app).
+    internal void ShowTrayBalloon(string text) =>
+        _trayIcon?.ShowBalloonTip(5000, "Toolbar", text, ToolTipIcon.Warning);
+
     private void ShowMainWindow()
     {
         if (MainWindow is not Window w) return;

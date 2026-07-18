@@ -102,18 +102,32 @@ public partial class MainWindow : Window
         // The HWND only exists from here on, which is what RegisterHotKey needs.
         _hotkey.Attach((HwndSource)PresentationSource.FromVisual(this)!);
         _hotkey.Pressed += ToggleVisibility;
-        ApplyHotkey();
+        if (!ApplyHotkey())
+            NotifyHotkeyFailure();
     }
 
     // Re-registers (or clears) the global hotkey from the current VM settings.
-    // Called at startup and whenever Settings is saved.
-    internal void ApplyHotkey()
+    // Called at startup and whenever Settings is saved. Returns false when the
+    // hotkey is enabled but the OS refused it (already taken by another app).
+    internal bool ApplyHotkey()
     {
-        if (_vm.HotkeyEnabled)
-            _hotkey.Register(_vm.HotkeyGesture);
-        else
+        if (!_vm.HotkeyEnabled)
+        {
             _hotkey.Unregister();
+            return true;
+        }
+        return _hotkey.Register(_vm.HotkeyGesture);
     }
+
+    // Non-blocking startup warning: a modal box at boot would be obnoxious, but
+    // a hotkey that silently stopped working (another app grabbed it since the
+    // last run) is worse. Deferred so the tray icon exists — OnSourceInitialized
+    // fires inside Show(), before App.OnStartup creates it.
+    private void NotifyHotkeyFailure() =>
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+            (System.Windows.Application.Current as App)?.ShowTrayBalloon(
+                $"The global hotkey {_vm.HotkeyGesture} couldn't be registered — " +
+                "another app may already be using it."));
 
     // Summon-or-dismiss. Pressing the hotkey while the bar is up and focused tucks
     // it away; otherwise it surfaces and takes focus.
@@ -330,10 +344,10 @@ public partial class MainWindow : Window
         };
     }
 
-    private static System.Drawing.Rectangle ScreenWorkingAreaAt(Point p) =>
-        System.Windows.Forms.Screen
-            .FromPoint(new System.Drawing.Point((int)p.X, (int)p.Y))
-            .WorkingArea;
+    // Working area in WPF DIPs — same unit as Left/Top/ActualWidth, so all the
+    // dock/snap/clamp math below stays in one coordinate space.
+    private static Rect ScreenWorkingAreaAt(Point p) =>
+        DisplayLayout.WorkingAreaAt(p.X, p.Y);
 
     private void Reveal()
     {
@@ -488,9 +502,7 @@ public partial class MainWindow : Window
 
     private void ClampToVisibleArea()
     {
-        var screen = System.Windows.Forms.Screen.FromPoint(
-            new System.Drawing.Point((int)Left, (int)Top));
-        var wa = screen.WorkingArea;
+        var wa = DisplayLayout.WorkingAreaAt(Left, Top);
 
         // Skip the clamp if the (scaled) window is larger than the working area —
         // Math.Clamp would otherwise see max < min and throw. The bar already
@@ -946,7 +958,12 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog() == true)
         {
             ApplyScale();
-            ApplyHotkey();
+            if (!ApplyHotkey())
+                System.Windows.MessageBox.Show(this,
+                    $"The hotkey {_vm.HotkeyGesture} couldn't be registered — " +
+                    "another app may already be using it.\n\n" +
+                    "Pick a different combination in Settings.",
+                    "Toolbar", MessageBoxButton.OK, MessageBoxImage.Warning);
             PersistShortcuts();
         }
     }

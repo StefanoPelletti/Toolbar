@@ -46,9 +46,8 @@ public partial class SearchWindow : Window
 
     private void ClampOnScreen()
     {
-        var wa = System.Windows.Forms.Screen
-            .FromPoint(new System.Drawing.Point((int)Left, (int)Top))
-            .WorkingArea;
+        // DIP-space working area — Left/Top/ActualWidth are DIPs too.
+        var wa = DisplayLayout.WorkingAreaAt(Left, Top);
 
         if (ActualWidth <= wa.Width)
             Left = Math.Clamp(Left, wa.Left, wa.Right - ActualWidth);

@@ -555,6 +555,7 @@ public partial class MainWindow : Window
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
     {
+        HangWatchdog.Log($"DisplaySettingsChanged on thread {Environment.CurrentManagedThreadId}: {DisplayLayout.Signature()}");
         Dispatcher.Invoke(() =>
         {
             // Capture current position under the OLD signature first, so returning to

@@ -17,10 +17,21 @@
     <Company>Stefano Pelletti</Company>
     <Description>A minimal floating launcher toolbar for Windows</Description>
     <Copyright>© 2026 Stefano Pelletti</Copyright>
-    <Version>1.3.3</Version>
-    <AssemblyVersion>1.3.3.0</AssemblyVersion>
-    <FileVersion>1.3.3.0</FileVersion>
+    <Version>1.3.4</Version>
+    <AssemblyVersion>1.3.4.0</AssemblyVersion>
+    <FileVersion>1.3.4.0</FileVersion>
   </PropertyGroup>
+
+  <!-- WPF's pen/touch stack loads PenIMC_cor3.dll through its own native loader,
+       which cannot find the DLL inside a single-file bundle. Any tablet re-scan
+       (monitor power cycle, display driver upgrade) then throws DllNotFoundException
+       per device, once per re-scan. Off, WPF never touches PenIMC: no stylus/touch
+       events, but touch still arrives as mouse input, which is all the bar uses. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption
+        Include="Switch.System.Windows.Input.Stylus.DisableStylusAndTouchSupport"
+        Value="true" />
+  </ItemGroup>
 
   <!-- Portable single-file release profile -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">

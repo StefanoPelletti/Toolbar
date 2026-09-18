@@ -15,6 +15,7 @@ public partial class App : Application
 
     private Mutex? _mutex;
     private bool _ownsMutex;
+    private bool _reportedError;
     private NotifyIcon? _trayIcon;
     private System.Drawing.Icon? _trayIconHandle; // owned; NotifyIcon does not dispose it (B3)
 
@@ -22,8 +23,16 @@ public partial class App : Application
     {
         DispatcherUnhandledException += (_, ex) =>
         {
-            MessageBox.Show(ex.Exception.ToString(), "Toolbar — Unhandled Error",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            HangWatchdog.Log($"Unhandled exception: {ex.Exception}");
+            // At most one dialog per run. A fault that repeats per event (a device
+            // re-scan raising one exception per tablet, say) otherwise stacks modal
+            // boxes faster than they can be dismissed, and the bar has to be killed.
+            if (!_reportedError)
+            {
+                _reportedError = true;
+                MessageBox.Show(ex.Exception.ToString(), "Toolbar — Unhandled Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
             ex.Handled = true;
         };
 
@@ -50,6 +59,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         UpdateService.CleanupLeftover();
+        HangWatchdog.Start(Dispatcher);
 
         var window = new MainWindow();
         MainWindow = window;

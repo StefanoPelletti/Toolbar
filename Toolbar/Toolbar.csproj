@@ -17,9 +17,9 @@
     <Company>Stefano Pelletti</Company>
     <Description>A minimal floating launcher toolbar for Windows</Description>
     <Copyright>© 2026 Stefano Pelletti</Copyright>
-    <Version>1.3.4</Version>
-    <AssemblyVersion>1.3.4.0</AssemblyVersion>
-    <FileVersion>1.3.4.0</FileVersion>
+    <Version>1.3.5</Version>
+    <AssemblyVersion>1.3.5.0</AssemblyVersion>
+    <FileVersion>1.3.5.0</FileVersion>
   </PropertyGroup>
 
   <!-- WPF's pen/touch stack loads PenIMC_cor3.dll through its own native loader,

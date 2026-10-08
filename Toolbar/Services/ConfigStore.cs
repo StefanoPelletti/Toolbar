@@ -69,7 +69,10 @@ public class ConfigStore
     public void Save(AppConfig config)
     {
         _pending = config;
-        lock (_flushLock) _lastFlushed = null; // mark dirty so the next flush actually writes
+        // Mark dirty without taking _flushLock: the timer thread holds that lock
+        // only for file I/O, but Save runs on the UI thread and must never block
+        // on it (that was a deadlock — see Flush).
+        Interlocked.Increment(ref _version);
         _debounceTimer.Change(200, System.Threading.Timeout.Infinite);
     }
 
@@ -79,27 +82,45 @@ public class ConfigStore
         Flush(config);
     }
 
-    private AppConfig? _lastFlushed;
+    // Bumped by every Save; _flushedVersion is the version last written to disk.
+    // Starts at -1 so the first flush always writes.
+    private long _version;
+    private long _flushedVersion = -1;
 
     private void Flush(AppConfig? config)
     {
         if (config is null) return;
+
+        // Cheap idempotency: if SaveImmediate just wrote the current state and
+        // the debounce callback fires right after, skip the redundant work.
+        if (Interlocked.Read(ref _version) <= Interlocked.Read(ref _flushedVersion)) return;
+
+        string json;
+        long version;
+        try
+        {
+            // Serialize on the UI thread so the AppConfig graph (Dictionary,
+            // List) isn't being mutated concurrently. Invoke is a direct call
+            // when we're already on the UI thread (SaveImmediate path), so it
+            // adds no measurable overhead there. The version is read in the same
+            // UI-thread step, so it matches exactly what was serialized.
+            //
+            // This must stay OUTSIDE _flushLock: holding the lock while waiting
+            // for the UI thread deadlocked the app when the UI thread entered
+            // Save (e.g. a monitor power-cycle moving the window) mid-flush.
+            (json, version) = _uiDispatcher.Invoke(
+                () => (JsonSerializer.Serialize(config, JsonOptions), Interlocked.Read(ref _version)));
+        }
+        catch { return; /* swallow — non-critical */ }
+
         lock (_flushLock)
         {
-            // Cheap idempotency: if SaveImmediate just wrote this same instance
-            // and the debounce callback fires right after, skip the redundant
-            // serialize+write.
-            if (ReferenceEquals(config, _lastFlushed)) return;
+            // A concurrent flush may already have written this or a newer
+            // snapshot; never overwrite newer state with older.
+            if (version <= _flushedVersion) return;
 
             try
             {
-                // Serialize on the UI thread so the AppConfig graph (Dictionary,
-                // List) isn't being mutated concurrently. Invoke is a direct call
-                // when we're already on the UI thread (SaveImmediate path), so it
-                // adds no measurable overhead there.
-                var json = _uiDispatcher.Invoke(
-                    () => JsonSerializer.Serialize(config, JsonOptions));
-
                 // File I/O stays on whichever thread Flush was called from —
                 // typically the timer's threadpool thread — so a slow disk
                 // never freezes the UI.
@@ -112,7 +133,7 @@ public class ConfigStore
                 var tmp = ConfigPath + ".tmp";
                 File.WriteAllText(tmp, json);
                 File.Move(tmp, ConfigPath, overwrite: true);
-                _lastFlushed = config;
+                Interlocked.Exchange(ref _flushedVersion, version);
             }
             catch { /* swallow — non-critical */ }
         }
